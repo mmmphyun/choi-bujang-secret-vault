@@ -13,7 +13,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     try {
-      const response = await supabaseRequest(`/rest/v1/notes?id=eq.${encodedId}&select=id,title,content`);
+      const response = await supabaseRequest(`/rest/v1/notes?id=eq.${encodedId}&select=id,title,content,owner_id`);
       if (!response.ok) {
         return res.status(response.status).json({ error: 'Database request failed' });
       }
@@ -25,6 +25,11 @@ export default async function handler(req, res) {
       }
 
       const note = rows[0];
+      if (!note.owner_id || note.owner_id !== authUser.userId) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.setHeader('Cache-Control', 'no-store');
       return res.status(200).json({
@@ -44,14 +49,36 @@ export default async function handler(req, res) {
     }
     payload = payload || {};
 
-    const { title, body: reqBody, content } = payload;
-    const updateData = {};
-    if (typeof title === 'string') updateData.title = title.trim();
-    if (typeof reqBody === 'string') updateData.content = reqBody;
-    else if (typeof content === 'string') updateData.content = content;
+    // 새 행의 소유자 변경 시도 감지 시 거부
+    if (payload.owner_id && payload.owner_id !== authUser.userId) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      return res.status(403).json({ error: 'Forbidden: Cannot change owner' });
+    }
 
     try {
-      const response = await supabaseRequest(`/rest/v1/notes?id=eq.${encodedId}`, {
+      // 기존 행 조회 및 소유자 확인
+      const checkRes = await supabaseRequest(`/rest/v1/notes?id=eq.${encodedId}&select=id,owner_id`);
+      if (!checkRes.ok) {
+        return res.status(checkRes.status).json({ error: 'Database request failed' });
+      }
+      const existing = await checkRes.json();
+      if (!Array.isArray(existing) || existing.length === 0) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        return res.status(404).json({ error: 'Note not found' });
+      }
+
+      if (!existing[0].owner_id || existing[0].owner_id !== authUser.userId) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { title, body: reqBody, content } = payload;
+      const updateData = { owner_id: authUser.userId };
+      if (typeof title === 'string') updateData.title = title.trim();
+      if (typeof reqBody === 'string') updateData.content = reqBody;
+      else if (typeof content === 'string') updateData.content = content;
+
+      const response = await supabaseRequest(`/rest/v1/notes?id=eq.${encodedId}&owner_id=eq.${encodeURIComponent(authUser.userId)}`, {
         method: 'PATCH',
         headers: { 'Prefer': 'return=representation' },
         body: JSON.stringify(updateData)
@@ -81,8 +108,8 @@ export default async function handler(req, res) {
 
   if (req.method === 'DELETE') {
     try {
-      // 삭제 전 존재 여부 확인
-      const checkRes = await supabaseRequest(`/rest/v1/notes?id=eq.${encodedId}&select=id`);
+      // 기존 행 조회 및 소유자 확인
+      const checkRes = await supabaseRequest(`/rest/v1/notes?id=eq.${encodedId}&select=id,owner_id`);
       if (!checkRes.ok) {
         return res.status(checkRes.status).json({ error: 'Database request failed' });
       }
@@ -92,7 +119,12 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: 'Note not found' });
       }
 
-      const delRes = await supabaseRequest(`/rest/v1/notes?id=eq.${encodedId}`, {
+      if (!existing[0].owner_id || existing[0].owner_id !== authUser.userId) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const delRes = await supabaseRequest(`/rest/v1/notes?id=eq.${encodedId}&owner_id=eq.${encodeURIComponent(authUser.userId)}`, {
         method: 'DELETE'
       });
 
