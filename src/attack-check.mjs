@@ -1,5 +1,5 @@
 export async function runAttackChecks(config) {
-  if (config.step !== 1 && config.step !== 3 && config.step !== 4) {
+  if (config.step !== 1 && config.step !== 3 && config.step !== 4 && config.step !== 5) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   let app;
@@ -169,6 +169,38 @@ export async function runAttackChecks(config) {
       ? `비로그인 삭제가 거부됨 (HTTP ${singleDelStatus}, ${singleDelBody})`
       : `비로그인 삭제가 거부되지 않음 (HTTP ${singleDelStatus})`,
   });
+
+  // 7. 원본 자료 API 직접 조회 차단 점검 (5단계)
+  if (config.step >= 5 && config.originalApiUrl) {
+    let originalStatus = 0;
+    let originalHasNotes = false;
+    let originalError = '';
+    try {
+      const res = await fetch(config.originalApiUrl, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        redirect: 'error',
+        signal: AbortSignal.timeout(10000),
+      });
+      originalStatus = res.status;
+      const data = await res.json().catch(() => null);
+      if (Array.isArray(data) && data.length > 0) {
+        originalHasNotes = true;
+      } else if (data && typeof data === 'object') {
+        originalError = data.message || data.error || data.msg || '';
+      }
+    } catch (e) {
+      originalError = e.message || '요청 실패';
+    }
+
+    results.push({
+      attackId: 'anonymous_original_api_blocked',
+      expected: '원본 API 직접 GET 요청 시 비인가(401/403) 또는 자료 미노출이어야 함',
+      observed: (!originalHasNotes && (originalStatus === 401 || originalStatus === 403 || originalStatus === 400 || originalStatus === 404 || originalError))
+        ? `원본 자료 직접 조회가 차단됨 (HTTP ${originalStatus}, ${originalError || '자료 0건'})`
+        : (originalHasNotes ? '원본 자료가 비인가 상태로 직접 조회됨' : `응답 상태 HTTP ${originalStatus}`),
+    });
+  }
 
   return results;
 }

@@ -16,3 +16,9 @@ insert into notes (title, content) values
   ('포트폴리오', '실습용 가상 포트폴리오 기록'),
   ('아침 리추얼', '실습용 가상 리추얼 기록'),
   ('훈련 행정 자료', '실습용 가상 행정 기록');
+
+-- 5단계: PUBLIC, anon, authenticated 직접 권한 전면 회수 (서버리스 함수 service_role만 허용)
+revoke all on table notes from public;
+revoke all on table notes from anon;
+revoke all on table notes from authenticated;
+
