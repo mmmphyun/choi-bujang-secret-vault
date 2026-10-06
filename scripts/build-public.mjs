@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { deploymentIdentity } from './deployment-identity.mjs';
 
@@ -17,10 +17,8 @@ if (config.step === 1) {
   await copyFile(source, output);
   console.log('실습용 공개 자료를 public/data.json에 복사했습니다.');
 } else {
-  // 2단계 이후에는 공개 정적 data.json에 메모 본문을 복사하지 않음
-  const emptyData = { sampleMarker: config.sampleMarker || 'SAMPLE_NOTE_1', notes: [] };
-  await writeFile(output, `${JSON.stringify(emptyData, null, 2)}\n`, 'utf8');
-  console.log('2단계 이상: public/data.json에 메모를 포함하지 않습니다.');
+  // 2단계 이상: 정적 배포에서 data.json 및 마커를 완전히 제거
+  await rm(output, { force: true });
 }
 
 if (!process.argv.includes('--local')) {
