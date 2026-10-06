@@ -41,7 +41,19 @@
   * 로컬 빌드 검증: `npm run build -- --local`
   * 배포 및 동작 확인: 변경사항을 GitHub main 브랜치로 push하여 Vercel 배포 후, 배포 도메인에서 로그인 및 메모 추가·수정·삭제를 테스트합니다.
   * 거부 확인: 브라우저 주소창 또는 curl로 `GET /api/notes` 직접 호출 시 `401 Unauthorized`가 반환되는지 확인합니다.
-* **남은 약점 (타인 자료 접근 허점)**:
-  * 현재는 로그인된 유효한 사용자이기만 하면 메모의 소유자(`owner_id`) 일치 여부를 대조하지 않고 단건 수정(`PUT`) 및 삭제(`DELETE`)가 가능합니다(B 계정이 A 계정의 메모를 수정할 수 있는 IDOR 취약점). 이 허점은 4단계에서 해결합니다.
+* **해결된 약점**:
+  * 3단계의 타인 자료 접근 허점(IDOR)을 4단계에서 API 계층 인가 검증과 DB RLS를 통해 완전히 해결했습니다.
+
+## 4단계: 로그인해도 내 자료만 보이게 합니다
+
+* **작동하는 기능**:
+  * **API 계층 인가 및 IDOR 방어**: `GET /api/notes/:id`, `PUT /api/notes/:id`, `DELETE /api/notes/:id` 호출 시 DB의 `owner_id`와 JWT 검증 사용자(`userId`)를 대조하여, 타인 소유 자원 접근 또는 소유자 변경 시도시 `403 Forbidden` JSON 오류로 즉시 거부합니다.
+  * **수정/삭제 무결성**: 수정(`PUT`) 시 요청 본문의 `owner_id` 변조를 차단하고 기존 행과 갱신 행 모두 본인 소유일 때만 반영합니다.
+  * **DB 최소 권한 및 RLS 격리**: Supabase `notes` 테이블의 기본 권한을 `REVOKE`하고, `authenticated` 역할에만 `auth.uid() = owner_id` 조건의 최소 CRUD 권한(SELECT, INSERT, UPDATE, DELETE) 및 RLS 정책을 부여했습니다(`anon` 역할은 전면 차단).
+* **다시 실행하는 방법**:
+  * 로컬 검증: `npm run build -- --local` 및 `npm run test:r5`
+  * 제출 묶음 생성: `npm run bundle`
+  * 원격 배포 및 검증: 변경사항을 main 브랜치에 push 후 배포 URL에서 계정 A/B로 로그인하여 본인 메모 CRUD 및 타인 메모 수정·삭제 거부(403) 확인.
+
 
 

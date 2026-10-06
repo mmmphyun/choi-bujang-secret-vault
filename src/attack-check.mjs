@@ -1,5 +1,7 @@
 export async function runAttackChecks(config) {
-  if (config.step !== 3) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
+  if (config.step !== 1 && config.step !== 3 && config.step !== 4) {
+    throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
+  }
   let app;
   try {
     app = new URL(config.publicAppUrl);
@@ -9,6 +11,17 @@ export async function runAttackChecks(config) {
   if (app.protocol !== 'https:' || app.username || app.password || app.search || app.hash
       || app.pathname !== '/' || app.hostname.endsWith('.example')) {
     throw new Error('aleph.config.json의 실제 배포 주소를 먼저 넣어 주세요.');
+  }
+
+  if (config.step === 1) {
+    const res = await fetch(new URL('/data.json', app), { redirect: 'error' });
+    const text = await res.text();
+    const hasMarker = text.includes(config.sampleMarker);
+    return [{
+      attackId: 'anonymous_sample_marker',
+      expected: '공개 data.json에서 확인 표시가 보여야 함',
+      observed: hasMarker ? '확인 표시가 보임' : '보이지 않음',
+    }];
   }
 
   const results = [];
@@ -33,7 +46,7 @@ export async function runAttackChecks(config) {
     observed: staticHasNotes ? '정적 파일에 여전히 메모가 남아있음' : '정적 파일에서 메모가 성공적으로 제거됨',
   });
 
-  // 2. 비로그인 GET /api/notes 접근 차단 점검 (3단계 방어)
+  // 2. 비로그인 GET /api/notes 접근 차단 점검 (3단계 방어 유지)
   let getStatus = 0;
   let getErrorBody = '';
   try {
@@ -57,7 +70,7 @@ export async function runAttackChecks(config) {
       : `비로그인 조회가 거부되지 않음 (HTTP ${getStatus})`,
   });
 
-  // 3. 비로그인 POST /api/notes 추가 차단 점검 (3단계 방어)
+  // 3. 비로그인 POST /api/notes 추가 차단 점검 (3단계 방어 유지)
   let postStatus = 0;
   let postErrorBody = '';
   try {
@@ -81,6 +94,80 @@ export async function runAttackChecks(config) {
     observed: (postStatus === 401 || postStatus === 403)
       ? `비로그인 생성이 거부됨 (HTTP ${postStatus}, ${postErrorBody})`
       : `비로그인 생성이 거부되지 않음 (HTTP ${postStatus})`,
+  });
+
+  // 4. 비로그인 단건 GET /api/notes/:id 차단 점검 (4단계)
+  let singleGetStatus = 0;
+  let singleGetBody = '';
+  try {
+    const res = await fetch(new URL('/api/notes/00000000-0000-0000-0000-000000000000', app), {
+      method: 'GET',
+      redirect: 'error',
+      signal: AbortSignal.timeout(10000),
+    });
+    singleGetStatus = res.status;
+    const body = await res.json().catch(() => ({}));
+    singleGetBody = body.error || '';
+  } catch {
+    singleGetStatus = 0;
+  }
+
+  results.push({
+    attackId: 'anonymous_single_get_blocked',
+    expected: '비로그인 단건 GET 요청 시 401 또는 403 JSON 오류로 거부되어야 함',
+    observed: (singleGetStatus === 401 || singleGetStatus === 403)
+      ? `비로그인 단건 조회가 거부됨 (HTTP ${singleGetStatus}, ${singleGetBody})`
+      : `비로그인 단건 조회가 거부되지 않음 (HTTP ${singleGetStatus})`,
+  });
+
+  // 5. 비로그인 단건 PUT /api/notes/:id 차단 점검 (4단계)
+  let singlePutStatus = 0;
+  let singlePutBody = '';
+  try {
+    const res = await fetch(new URL('/api/notes/00000000-0000-0000-0000-000000000000', app), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: '변조 시도', body: '수정 시도' }),
+      redirect: 'error',
+      signal: AbortSignal.timeout(10000),
+    });
+    singlePutStatus = res.status;
+    const body = await res.json().catch(() => ({}));
+    singlePutBody = body.error || '';
+  } catch {
+    singlePutStatus = 0;
+  }
+
+  results.push({
+    attackId: 'anonymous_single_put_blocked',
+    expected: '비로그인 PUT 요청 시 401 또는 403 JSON 오류로 거부되어야 함',
+    observed: (singlePutStatus === 401 || singlePutStatus === 403)
+      ? `비로그인 수정이 거부됨 (HTTP ${singlePutStatus}, ${singlePutBody})`
+      : `비로그인 수정이 거부되지 않음 (HTTP ${singlePutStatus})`,
+  });
+
+  // 6. 비로그인 단건 DELETE /api/notes/:id 차단 점검 (4단계)
+  let singleDelStatus = 0;
+  let singleDelBody = '';
+  try {
+    const res = await fetch(new URL('/api/notes/00000000-0000-0000-0000-000000000000', app), {
+      method: 'DELETE',
+      redirect: 'error',
+      signal: AbortSignal.timeout(10000),
+    });
+    singleDelStatus = res.status;
+    const body = await res.json().catch(() => ({}));
+    singleDelBody = body.error || '';
+  } catch {
+    singleDelStatus = 0;
+  }
+
+  results.push({
+    attackId: 'anonymous_single_delete_blocked',
+    expected: '비로그인 DELETE 요청 시 401 또는 403 JSON 오류로 거부되어야 함',
+    observed: (singleDelStatus === 401 || singleDelStatus === 403)
+      ? `비로그인 삭제가 거부됨 (HTTP ${singleDelStatus}, ${singleDelBody})`
+      : `비로그인 삭제가 거부되지 않음 (HTTP ${singleDelStatus})`,
   });
 
   return results;
