@@ -48,7 +48,7 @@
     <h1>점령된 자료실</h1>
     <p>지금은 보호 장치를 부착하는 단계입니다. 아래 기록은 실습을 위한 가상 자료입니다.</p>
 
-    <!-- Supabase Auth 인증 영역 -->
+    <!-- 인증 영역 -->
     <section class="auth-card" id="auth-section">
       <div id="auth-logged-out">
         <h2>로그인</h2>
@@ -81,13 +81,6 @@
     <ul id="notes" aria-live="polite"><li>로그인 후 자료를 확인할 수 있습니다.</li></ul>
   </main>
   <script type="module">
-    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-
-    const SUPABASE_URL = 'https://lokymnrpfrnfirmhjvht.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxva3ltbnJwZnJuZmlybWhqdmh0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyMjcwODksImV4cCI6MjEwNjgwMzA4OX0.3IQyo-QPPDPa5zfsPBkmzruuNOtqGcixOPXypGAh2F8';
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
     const loggedOutDiv = document.querySelector('#auth-logged-out');
     const loggedInDiv = document.querySelector('#auth-logged-in');
     const createNoteSection = document.querySelector('#create-note-section');
@@ -270,29 +263,33 @@
       const email = document.querySelector('#login-email').value;
       const password = document.querySelector('#login-password').value;
 
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
+      try {
+        const res = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || '로그인에 실패했습니다.');
+        }
+        sessionStorage.setItem('auth_session', JSON.stringify(data));
+        updateAuthState(data);
+      } catch (error) {
         loginError.textContent = error.message;
-      } else {
-        updateAuthState(data.session);
       }
     });
 
-    logoutBtn.addEventListener('click', async () => {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        alert(error.message);
-      } else {
-        updateAuthState(null);
-      }
+    logoutBtn.addEventListener('click', () => {
+      sessionStorage.removeItem('auth_session');
+      updateAuthState(null);
     });
 
-    const { data: { session } } = await supabase.auth.getSession();
-    updateAuthState(session);
-
-    supabase.auth.onAuthStateChange((_event, currentSession) => {
-      updateAuthState(currentSession);
-    });
+    let savedSession = null;
+    try {
+      savedSession = JSON.parse(sessionStorage.getItem('auth_session'));
+    } catch {}
+    updateAuthState(savedSession);
   </script>
 </body>
 </html>

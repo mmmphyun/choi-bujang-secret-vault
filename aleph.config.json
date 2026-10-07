@@ -10,6 +10,7 @@
     "audience": "authenticated"
   },
   "allowedRoutes": [
+    "POST /api/auth",
     "GET /api/notes",
     "POST /api/notes",
     "GET /api/notes/:id",

@@ -58,10 +58,10 @@
 ## 5단계: 자료 요청을 서버 한곳으로 모읍니다
 
 * **작동하는 기능**:
-  * **서버리스 프록시 일원화**: 브라우저의 메모 읽기·추가·수정·삭제 요청은 모두 Vercel 서버 함수(`/api/notes`, `/api/notes/:id`)를 통해서만 수행되며, 브라우저에서 Supabase REST API로의 직접 데이터 요청 경로는 존재하지 않습니다.
+  * **서버리스 프록시 일원화**: 브라우저의 메모 읽기·추가·수정·삭제 요청은 물론 로그인 인증(`POST /api/auth`)까지 모두 Vercel 서버 함수를 통해서만 수행되며, 화면 코드(`public/index.html`)에서 Supabase SDK 및 공개 anon 키(`SUPABASE_ANON_KEY`)를 전면 제거했습니다.
   * **DB 권한 전면 회수**: Supabase `notes` 테이블에 대해 `PUBLIC`, `anon`, `authenticated` 역할의 직접 권한을 전면 `REVOKE`하고 RLS를 적용하여, 공개 키 또는 사용자 토큰으로 원본 Supabase API를 직접 조회·수정하는 시도를 원천 차단했습니다.
-  * **서버 전용 접근 통제 유지**: Vercel 서버리스 함수(`api/_auth.js`)는 `service_role` 키를 사용하여 안전하게 DB와 통신하며, 서버 함수 내의 인증 및 소유자 인가 검증 로직을 엄격하게 유지합니다.
-  * **설정 등록**: `aleph.config.json`에 `step: 5` 및 쿼리 파라미터 없는 원본 자료 HTTPS 경로(`originalApiUrl`)를 등록했습니다.
+  * **서버 전용 접근 통제 유지**: Vercel 서버리스 함수(`api/_auth.js`, `api/auth.js`)는 서버 환경변수의 키를 사용하여 안전하게 통신하며, 서버 함수 내의 인증 및 소유자 인가 검증 로직을 엄격하게 유지합니다.
+  * **설정 등록**: `aleph.config.json`에 `step: 5`, 쿼리 파라미터 없는 원본 자료 HTTPS 경로(`originalApiUrl`), 및 `allowedRoutes`를 등록했습니다.
 * **다시 실행하는 방법**:
   * 로컬 검증: `npm run build -- --local` 및 `npm run test:r5`
   * 제출 묶음 생성: `npm run bundle`
