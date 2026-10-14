@@ -82,8 +82,24 @@
     * `통과 · 등록 기기의 정상 요청` (allow 판정)
     * `통과 · 미등록 기기의 가상 요청` (deny 및 device_not_registered 판정)
   * 기존 단위/빌드 검증: `npm run build -- --local` 및 `npm run test:r5`
+## 7단계: 평소와 다른 접속은 다시 확인합니다
+
+* **작동하는 기능**:
+  * **신호 출처 검증**: `src/decider.mjs`에서 엔진이 넘긴 신호(`signals`)의 출처(`source`)를 검증하여 위조된 클라이언트 헤더가 정상 접속 정보로 승격되지 않도록 차단했습니다.
+  * **복합 이상 접속 판정 규칙(`step_up_required`)**: 비통상 시각(심야), 미확인 네트워크, 대량 요청/위험 행동 신호가 결합된 가상 사건을 탐지하여 추가 본인 확인(`decision: 'step_up'`, `reasonCode: 'step_up_required'`)을 요구합니다. 지역(`region`) 단독으로는 영구 차단하지 않습니다.
+  * **재인증 승인**: 기인증된 유효 추가 인증(`request.stepUp.verified === true` 및 유효 시간 내) 요청은 정상 승인(`decision: 'allow'`, `reasonCode: 'approved'`)합니다.
+  * **설정 등록**: `aleph.config.json` 단계를 `step: 7`로 갱신하고 기존 발급자, 원본 API 주소, 허용 라우트를 유지했습니다.
+* **다시 실행하는 방법 (확인 순서)**:
+  * 로컬 판정기 시험을 실행합니다:
+    ```bash
+    npm run decider:test
+    npm run fixture:7
+    ```
+  * 시험 결과에서 다음 네 항목이 모두 `통과`로 출력되는지 확인합니다:
+    * `통과 · 등록 기기의 정상 요청` (allow 판정)
+    * `통과 · 미등록 기기의 가상 요청` (deny 판정)
+    * `통과 · 복합 이상 접속` (step_up 판정)
+    * `통과 · 다시 확인한 복합 이상 접속` (allow 판정)
+  * `npm run fixture:7`에서 정상 사건은 `allow`, 복합 이상 사건은 `step_up`으로 판정되는지 확인합니다.
+  * 기존 단위/빌드 검증: `npm run build -- --local` 및 `npm run test:r5`
   * 제출 묶음 생성: `npm run bundle`
-
-
-
-
