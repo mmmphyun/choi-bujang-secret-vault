@@ -266,12 +266,43 @@ export async function runAttackChecks(config) {
     });
   }
 
-  // 9. 10단계 복구 경로 점검: 위조 해시 및 미등록 ID 복구 차단 점검
+  // 9. 10단계 복구 경로 및 복구 뒤 재시험 점검 (정상 요청 및 금지 요청)
   if (config.step >= 10 && config.restoreRoute) {
     const restorePath = config.restoreRoute.replace(/^POST\s+/iu, '').trim();
 
-    // 9-1. 위조된 내용 해시로 복구 요청 시 거부 점검
+    // 9-1. 복구 경로 정상 요청 재시험 (사본과 일치하는 ID·소유자·해시)
+    let validRestoreStatus = 0;
+    let validRestoreBody = null;
+    try {
+      const res = await fetch(new URL(restorePath, app), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: 'b0000000-0000-0000-0000-000000000001',
+          owner_id: 'b0000000-0000-0000-0000-000000000002',
+          contentHash: 'f5d4d11e127ce3c145e80f3aca71bcb780700e04568a1f31e3e9777097a1f8dd'
+        }),
+        redirect: 'error',
+        signal: AbortSignal.timeout(10000),
+      });
+      validRestoreStatus = res.status;
+      validRestoreBody = await res.json().catch(() => ({}));
+    } catch {
+      validRestoreStatus = 0;
+    }
+
+    const isRestoreValid = validRestoreStatus === 200 && validRestoreBody?.success === true;
+    results.push({
+      attackId: 'restore_valid_note_allowed',
+      expected: '사본과 일치하는 ID·소유자·내용 해시 요청 시 200 성공 및 복원 데이터 반환',
+      observed: isRestoreValid
+        ? `사본 데이터 복원 성공 (HTTP 200, 해시 일치)`
+        : `사본 데이터 복원 실패 (HTTP ${validRestoreStatus})`,
+    });
+
+    // 9-2. 복구 경로 금지 요청 재시험: 위조된 내용 해시로 복구 요청 시 거부 점검
     let forgedHashStatus = 0;
+    let forgedErrorMsg = '';
     try {
       const res = await fetch(new URL(restorePath, app), {
         method: 'POST',
@@ -285,6 +316,8 @@ export async function runAttackChecks(config) {
         signal: AbortSignal.timeout(10000),
       });
       forgedHashStatus = res.status;
+      const b = await res.json().catch(() => ({}));
+      forgedErrorMsg = b.error || '';
     } catch {
       forgedHashStatus = 0;
     }
@@ -292,13 +325,14 @@ export async function runAttackChecks(config) {
     results.push({
       attackId: 'restore_forged_hash_blocked',
       expected: '위조된 내용 해시로 복구 요청 시 400 또는 403으로 거부되어야 함',
-      observed: (forgedHashStatus === 400 || forgedHashStatus === 403 || forgedHashStatus === 401)
-        ? `위조 해시 복구 요청이 거부됨 (HTTP ${forgedHashStatus})`
+      observed: (forgedHashStatus === 400 || forgedHashStatus === 403)
+        ? `위조 해시 복구 요청이 거부됨 (HTTP ${forgedHashStatus}, ${forgedErrorMsg})`
         : `위조 해시 복구 요청이 거부되지 않음 (HTTP ${forgedHashStatus})`,
     });
 
-    // 9-2. 사본에 없는 미등록 ID 복구 요청 시 거부 점검
+    // 9-3. 복구 경로 금지 요청 재시험: 사본에 없는 미등록 ID 복구 요청 시 거부 점검
     let unknownIdStatus = 0;
+    let unknownErrorMsg = '';
     try {
       const res = await fetch(new URL(restorePath, app), {
         method: 'POST',
@@ -311,6 +345,8 @@ export async function runAttackChecks(config) {
         signal: AbortSignal.timeout(10000),
       });
       unknownIdStatus = res.status;
+      const b = await res.json().catch(() => ({}));
+      unknownErrorMsg = b.error || '';
     } catch {
       unknownIdStatus = 0;
     }
@@ -318,9 +354,30 @@ export async function runAttackChecks(config) {
     results.push({
       attackId: 'restore_unknown_id_blocked',
       expected: '사본에 없는 ID 복구 요청 시 404 또는 400으로 거부되어야 함',
-      observed: (unknownIdStatus === 404 || unknownIdStatus === 400 || unknownIdStatus === 401 || unknownIdStatus === 403)
-        ? `미등록 ID 복구 요청이 거부됨 (HTTP ${unknownIdStatus})`
+      observed: (unknownIdStatus === 404 || unknownIdStatus === 400)
+        ? `미등록 ID 복구 요청이 거부됨 (HTTP ${unknownIdStatus}, ${unknownErrorMsg})`
         : `미등록 ID 복구 요청이 거부되지 않음 (HTTP ${unknownIdStatus})`,
+    });
+
+    // 9-4. 복구 뒤 1~9단계 대표 금지 요청 재시험: 비로그인 단건 메모 접근 거부 유지
+    let postRestoreCheckStatus = 0;
+    try {
+      const res = await fetch(new URL('/api/notes/b0000000-0000-0000-0000-000000000001', app), {
+        method: 'GET',
+        redirect: 'error',
+        signal: AbortSignal.timeout(10000),
+      });
+      postRestoreCheckStatus = res.status;
+    } catch {
+      postRestoreCheckStatus = 0;
+    }
+
+    results.push({
+      attackId: 'restore_retest_unauthorized_blocked',
+      expected: '복구 완료 후에도 비로그인 메모 접근은 401 또는 403으로 거부되어야 함',
+      observed: (postRestoreCheckStatus === 401 || postRestoreCheckStatus === 403)
+        ? `복구 후에도 비로그인 메모 조회가 거부됨 (HTTP ${postRestoreCheckStatus})`
+        : `복구 후 비로그인 메모 조회가 거부되지 않음 (HTTP ${postRestoreCheckStatus})`,
     });
   }
 
