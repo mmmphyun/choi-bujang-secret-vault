@@ -165,3 +165,42 @@
     npm run bundle
     ```
 
+## 10단계: 백업에서 자료실을 되살립니다
+
+* **작동하는 기능**:
+  * **안전 정책 사본 대조 및 diff 분석(`scripts/policy-diff.mjs`)**: 침해 전 검증된 안전 정책 사본(`src/policy-backup.json`)의 SHA-256 무결성 해시를 대조하여, 변조 여부를 검증하고 현재 시험 정책과의 변경 범위(diff)만 사전 출력합니다. 사본 부재 또는 해시 불일치 시 작업을 즉시 중단하며 실제 운영 정책은 건드리지 않습니다.
+  * **안전 정책 복원 절차(`scripts/policy-restore.mjs`)**: 검증된 사본 버전으로 시험 정책을 안전하게 되돌립니다. 실행 전 바뀔 항목을 출력하며, 감사 이력과 타 서비스 규칙을 온전히 보존합니다. 정책 복원 후 계정 B의 계정 A 자료 요청은 다시 403 Forbidden으로 거부되고 계정 A의 정상 요청은 유지됩니다.
+  * **비공개 가상 메모 사본 단건 복원 POST 엔드포인트(`POST /api/notes/restore`)**: 사본 저장소(`src/backup-notes.json`)에서 지정된 한 건의 메모 ID, 소유자(`owner_id`), 내용 해시(`contentHash`)를 정밀 대조한 후 DB에 복원(UPSERT)합니다. 위조된 해시는 400 Bad Request, 소유자 불일치/타인 메모 복구 시도는 403 Forbidden으로 거부하며, 다른 메모와 감사 기록은 보존합니다.
+  * **설정 등록**: `aleph.config.json` 단계를 `step: 10`으로 올리고, `restoreRoute: "POST /api/notes/restore"` 및 `allowedRoutes`에 복구 경로를 등록했습니다.
+* **다시 실행하는 방법 (확인 순서 및 1~9단계 재시험)**:
+  1. 안전 정책 사본 diff 확인:
+     ```bash
+     npm run policy:diff
+     ```
+     - 정상 결과: 복원할 버전(1.0.0)과 변경 범위가 실행 전에 출력됩니다.
+  2. 안전 정책 복원 실행:
+     ```bash
+     npm run policy:restore
+     ```
+     - 정상 결과: 바뀔 항목이 확인된 후 안전 정책이 복원되며 계정 B의 A 자료 접근 차단이 복구됩니다.
+  3. 판정기 및 탐지기 규칙 재검증:
+     ```bash
+     npm run decider:test
+     npm run fixture:7
+     npm run detect:test
+     ```
+     - 정상 결과: 등록 기기 승인, 미등록 기기 거부, 복합 이상 step_up, 공지 읽기 허용/쓰기 거부, burst_read 탐지 통과.
+  4. 단위 및 복원 API 무결성 테스트:
+     ```bash
+     npm run test:r5
+     ```
+     - 정상 결과: 사본 무결성 검증, 위조 해시 400 거부, 소유자 변조 403 거부, 정상 일치 200 복원 통과.
+  5. 로컬 빌드 검증:
+     ```bash
+     npm run build -- --local
+     ```
+  6. 배포 및 제출 묶음 생성:
+     ```bash
+     npm run bundle
+     ```
+     - 실제로 실행하지 않은 원격 배포 및 심판 판정은 완료로 꾸미지 않고 제출 후 심판 결과를 확인합니다.

@@ -4,11 +4,13 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build-public.mjs",
-    "test:r5": "node --test test/r5.test.mjs",
+    "test:r5": "node --test test/*.test.mjs",
     "bundle": "node scripts/bundle.mjs",
     "decider:test": "node scripts/decider-test.mjs",
     "detect:test": "node scripts/detect-test.mjs",
-    "fixture:7": "node scripts/fixture-7.mjs"
+    "fixture:7": "node scripts/fixture-7.mjs",
+    "policy:diff": "node scripts/policy-diff.mjs",
+    "policy:restore": "node scripts/policy-restore.mjs"
   },
   "engines": {
     "node": ">=22"

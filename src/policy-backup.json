@@ -1,0 +1,37 @@
+{
+  "version": "1.0.0",
+  "name": "safe-access-policy-v1",
+  "verifiedAt": "2026-10-14T00:00:00Z",
+  "integrityHash": "54bbd42cecae8d1133761df1eab467c83440e2bfcaac222b9157d7021baec873",
+  "rules": [
+    "device_registered",
+    "step_up_required",
+    "zone_policy"
+  ],
+  "accessControl": {
+    "notes": {
+      "requireAuthentication": true,
+      "enforceOwnerIsolation": true,
+      "allowDirectAnonAccess": false,
+      "allowCrossUserAccess": false,
+      "allowedMethods": [
+        "GET",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "POST"
+      ]
+    },
+    "notices": {
+      "requireAuthentication": false,
+      "allowPublicRead": true,
+      "allowWrite": false,
+      "allowedMethods": [
+        "GET"
+      ]
+    },
+    "instructor": {
+      "allowStudentAccess": false
+    }
+  }
+}

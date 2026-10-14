@@ -1,5 +1,5 @@
 export async function runAttackChecks(config) {
-  if (config.step !== 1 && config.step !== 3 && config.step !== 4 && config.step !== 5 && config.step !== 6 && config.step !== 7 && config.step !== 8 && config.step !== 9) {
+  if (config.step !== 1 && config.step !== 3 && config.step !== 4 && config.step !== 5 && config.step !== 6 && config.step !== 7 && config.step !== 8 && config.step !== 9 && config.step !== 10) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   let app;
@@ -263,6 +263,64 @@ export async function runAttackChecks(config) {
       observed: (noticeModifyStatus === 401 || noticeModifyStatus === 403 || noticeModifyStatus === 404 || noticeModifyStatus === 405)
         ? `공지 수정 시도가 차단됨 (HTTP ${noticeModifyStatus})`
         : `공지 수정 시도가 허용됨 (HTTP ${noticeModifyStatus})`,
+    });
+  }
+
+  // 9. 10단계 복구 경로 점검: 위조 해시 및 미등록 ID 복구 차단 점검
+  if (config.step >= 10 && config.restoreRoute) {
+    const restorePath = config.restoreRoute.replace(/^POST\s+/iu, '').trim();
+
+    // 9-1. 위조된 내용 해시로 복구 요청 시 거부 점검
+    let forgedHashStatus = 0;
+    try {
+      const res = await fetch(new URL(restorePath, app), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: 'b0000000-0000-0000-0000-000000000001',
+          owner_id: 'b0000000-0000-0000-0000-000000000002',
+          contentHash: '0000000000000000000000000000000000000000000000000000000000000000'
+        }),
+        redirect: 'error',
+        signal: AbortSignal.timeout(10000),
+      });
+      forgedHashStatus = res.status;
+    } catch {
+      forgedHashStatus = 0;
+    }
+
+    results.push({
+      attackId: 'restore_forged_hash_blocked',
+      expected: '위조된 내용 해시로 복구 요청 시 400 또는 403으로 거부되어야 함',
+      observed: (forgedHashStatus === 400 || forgedHashStatus === 403 || forgedHashStatus === 401)
+        ? `위조 해시 복구 요청이 거부됨 (HTTP ${forgedHashStatus})`
+        : `위조 해시 복구 요청이 거부되지 않음 (HTTP ${forgedHashStatus})`,
+    });
+
+    // 9-2. 사본에 없는 미등록 ID 복구 요청 시 거부 점검
+    let unknownIdStatus = 0;
+    try {
+      const res = await fetch(new URL(restorePath, app), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+          owner_id: '00000000-0000-0000-0000-000000000001'
+        }),
+        redirect: 'error',
+        signal: AbortSignal.timeout(10000),
+      });
+      unknownIdStatus = res.status;
+    } catch {
+      unknownIdStatus = 0;
+    }
+
+    results.push({
+      attackId: 'restore_unknown_id_blocked',
+      expected: '사본에 없는 ID 복구 요청 시 404 또는 400으로 거부되어야 함',
+      observed: (unknownIdStatus === 404 || unknownIdStatus === 400 || unknownIdStatus === 401 || unknownIdStatus === 403)
+        ? `미등록 ID 복구 요청이 거부됨 (HTTP ${unknownIdStatus})`
+        : `미등록 ID 복구 요청이 거부되지 않음 (HTTP ${unknownIdStatus})`,
     });
   }
 

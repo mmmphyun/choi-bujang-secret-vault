@@ -1,0 +1,28 @@
+{
+  "version": "0.9.0-compromised",
+  "name": "compromised-test-policy",
+  "updatedAt": "2026-10-14T03:00:00Z",
+  "rules": [
+    "device_registered",
+    "step_up_required",
+    "zone_policy"
+  ],
+  "accessControl": {
+    "notes": {
+      "requireAuthentication": true,
+      "enforceOwnerIsolation": false,
+      "allowDirectAnonAccess": false,
+      "allowCrossUserAccess": true,
+      "allowedMethods": ["GET", "PUT", "PATCH", "DELETE", "POST"]
+    },
+    "notices": {
+      "requireAuthentication": false,
+      "allowPublicRead": true,
+      "allowWrite": true,
+      "allowedMethods": ["GET", "PUT"]
+    },
+    "instructor": {
+      "allowStudentAccess": false
+    }
+  }
+}
