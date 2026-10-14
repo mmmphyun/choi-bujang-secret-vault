@@ -1,5 +1,5 @@
 export async function runAttackChecks(config) {
-  if (config.step !== 1 && config.step !== 3 && config.step !== 4 && config.step !== 5 && config.step !== 6 && config.step !== 7) {
+  if (config.step !== 1 && config.step !== 3 && config.step !== 4 && config.step !== 5 && config.step !== 6 && config.step !== 7 && config.step !== 8) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   let app;
@@ -199,6 +199,70 @@ export async function runAttackChecks(config) {
       observed: (!originalHasNotes && (originalStatus === 401 || originalStatus === 403 || originalStatus === 400 || originalStatus === 404 || originalError))
         ? `원본 자료 직접 조회가 차단됨 (HTTP ${originalStatus}, ${originalError || '자료 0건'})`
         : (originalHasNotes ? '원본 자료가 비인가 상태로 직접 조회됨' : `응답 상태 HTTP ${originalStatus}`),
+    });
+  }
+
+  // 8. 8단계 구역 격리 점검: 공지 ID로 메모 API 접근 및 공지 수정 차단 점검
+  if (config.step >= 8) {
+    let crossZoneReadStatus = 0;
+    try {
+      const res = await fetch(new URL('/api/notes/notice-1', app), {
+        method: 'GET',
+        redirect: 'error',
+        signal: AbortSignal.timeout(10000),
+      });
+      crossZoneReadStatus = res.status;
+    } catch {
+      crossZoneReadStatus = 0;
+    }
+    results.push({
+      attackId: 'cross_zone_note_read_blocked',
+      expected: '공지 ID로 메모 조회 시 401 또는 403으로 차단되어야 함',
+      observed: (crossZoneReadStatus === 401 || crossZoneReadStatus === 403 || crossZoneReadStatus === 404)
+        ? `다른 구역 메모 조회가 차단됨 (HTTP ${crossZoneReadStatus})`
+        : `다른 구역 메모 조회가 차단되지 않음 (HTTP ${crossZoneReadStatus})`,
+    });
+
+    let crossZoneModifyStatus = 0;
+    try {
+      const res = await fetch(new URL('/api/notes/notice-1', app), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: '변조 시도', body: '수정 시도' }),
+        redirect: 'error',
+        signal: AbortSignal.timeout(10000),
+      });
+      crossZoneModifyStatus = res.status;
+    } catch {
+      crossZoneModifyStatus = 0;
+    }
+    results.push({
+      attackId: 'cross_zone_note_modify_blocked',
+      expected: '공지 ID로 메모 수정 시 401 또는 403으로 차단되어야 함',
+      observed: (crossZoneModifyStatus === 401 || crossZoneModifyStatus === 403 || crossZoneModifyStatus === 404)
+        ? `다른 구역 메모 수정이 차단됨 (HTTP ${crossZoneModifyStatus})`
+        : `다른 구역 메모 수정이 차단되지 않음 (HTTP ${crossZoneModifyStatus})`,
+    });
+
+    let noticeModifyStatus = 0;
+    try {
+      const res = await fetch(new URL('/api/notices/notice-1', app), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: '공지 변조 시도', content: '수정 시도' }),
+        redirect: 'error',
+        signal: AbortSignal.timeout(10000),
+      });
+      noticeModifyStatus = res.status;
+    } catch {
+      noticeModifyStatus = 0;
+    }
+    results.push({
+      attackId: 'notice_modify_blocked',
+      expected: '학생/비인가 공지 수정 시 401 또는 403으로 차단되어야 함',
+      observed: (noticeModifyStatus === 401 || noticeModifyStatus === 403 || noticeModifyStatus === 404 || noticeModifyStatus === 405)
+        ? `공지 수정 시도가 차단됨 (HTTP ${noticeModifyStatus})`
+        : `공지 수정 시도가 허용됨 (HTTP ${noticeModifyStatus})`,
     });
   }
 

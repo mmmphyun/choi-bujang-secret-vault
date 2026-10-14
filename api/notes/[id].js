@@ -9,6 +9,12 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Note id is required' });
   }
 
+  // 다른 구역 자원 ID(공지, 강사 자료 등)로 메모 API에 접근 시 구역 격리 거부
+  if (id.startsWith('notice-') || id.startsWith('instructor-') || id.startsWith('announcement-')) {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    return res.status(403).json({ error: 'Forbidden: Invalid resource zone' });
+  }
+
   const encodedId = encodeURIComponent(id);
 
   if (req.method === 'GET') {
@@ -25,9 +31,10 @@ export default async function handler(req, res) {
       }
 
       const note = rows[0];
+      // 검증된 사용자와 저장된 소유자 대조 (타 구역/타인 메모 조회 차단)
       if (!note.owner_id || note.owner_id !== authUser.userId) {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        return res.status(403).json({ error: 'Forbidden' });
+        return res.status(403).json({ error: 'Forbidden: Access denied to other zone data' });
       }
 
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -69,7 +76,7 @@ export default async function handler(req, res) {
 
       if (!existing[0].owner_id || existing[0].owner_id !== authUser.userId) {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        return res.status(403).json({ error: 'Forbidden' });
+        return res.status(403).json({ error: 'Forbidden: Access denied to other zone data' });
       }
 
       const { title, body: reqBody, content } = payload;
@@ -121,7 +128,7 @@ export default async function handler(req, res) {
 
       if (!existing[0].owner_id || existing[0].owner_id !== authUser.userId) {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        return res.status(403).json({ error: 'Forbidden' });
+        return res.status(403).json({ error: 'Forbidden: Access denied to other zone data' });
       }
 
       const delRes = await supabaseRequest(`/rest/v1/notes?id=eq.${encodedId}&owner_id=eq.${encodeURIComponent(authUser.userId)}`, {

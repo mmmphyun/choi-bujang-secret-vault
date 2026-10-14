@@ -38,6 +38,23 @@ export async function checkDecider({ decide, ruleIds }) {
       decision: 'allow' },
     );
   }
+  if (ruleIds.includes('zone_policy')) {
+    checks.push(
+      { name: '메모 전체 목록 거부 (ID 없는 목록 경로)', request: { ...normal, requestId: randomUUID(),
+        path: '/notes', route: 'GET /notes' }, decision: 'deny', reasonCode: 'zone_not_allowed' },
+      { name: '공지 읽기 허용 (GET)', request: { ...normal, requestId: randomUUID(),
+        service: 'notices', path: '/notices/1', route: 'GET /notices/:id' }, decision: 'allow' },
+      { name: '공지 쓰기 거부 (PUT)', request: { ...normal, requestId: randomUUID(),
+        service: 'notices', method: 'PUT', path: '/notices/1', route: 'PUT /notices/:id' },
+        decision: 'deny', reasonCode: 'zone_not_allowed' },
+      { name: '강사 자료 거부', request: { ...normal, requestId: randomUUID(),
+        service: 'instructor', path: '/materials/exam', route: 'GET /materials/:id' },
+        decision: 'deny', reasonCode: 'zone_not_allowed' },
+      { name: '기능 경로 거부 (:id 위치의 export)', request: { ...normal, requestId: randomUUID(),
+        path: '/notes/export', route: 'GET /notes/export' },
+        decision: 'deny', reasonCode: 'zone_not_allowed' },
+    );
+  }
   const results = [];
   for (const item of checks) {
     const response = await decide(item.request);
