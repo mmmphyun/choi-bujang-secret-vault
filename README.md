@@ -67,5 +67,23 @@
   * 제출 묶음 생성: `npm run bundle`
   * 배포 및 확인: main 브랜치 push 후 브라우저에서 로그인 사용자 정상 메모 CRUD 확인 및 Supabase 원본 URL 직접 호출 차단 확인.
 
+## 6단계: 등록한 기기만 자료실에 들어옵니다
+
+* **작동하는 기능**:
+  * **기기 등록 판정 규칙(`device_registered`)**: SDP 엔진 계약(`docs/DECIDER_REQUEST.md`)에 따라 판정기(`src/decider.mjs`)에 기기 등록 상태 검증 규칙을 구현했습니다.
+  * **인가 및 거부 처리**: `request.deviceRegistered`가 `true`인 경우에만 승인(`decision: 'allow'`, `reasonCode: 'approved'`)하고, 미등록(`false`)이거나 누락된 요청은 즉시 거부(`decision: 'deny'`, `reasonCode: 'device_not_registered'`)합니다.
+  * **설정 등록**: `aleph.config.json`의 단계를 `step: 6`으로 갱신하고 기존의 원본 API 주소(`originalApiUrl`), 허용 라우트, 발급자 설정을 보존했습니다.
+* **다시 실행하는 방법 (확인 순서)**:
+  * 별도의 설치 프로그램은 없으며 로컬 판정기 시험을 실행합니다:
+    ```bash
+    npm run decider:test
+    ```
+  * 시험 결과에서 다음 두 항목이 모두 `통과`로 출력되는지 확인합니다:
+    * `통과 · 등록 기기의 정상 요청` (allow 판정)
+    * `통과 · 미등록 기기의 가상 요청` (deny 및 device_not_registered 판정)
+  * 기존 단위/빌드 검증: `npm run build -- --local` 및 `npm run test:r5`
+  * 제출 묶음 생성: `npm run bundle`
+
+
 
 
