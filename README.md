@@ -134,3 +134,34 @@
   * 기존 단위/빌드 검증: `npm run build -- --local` 및 `npm run test:r5`
   * 제출 묶음 생성: `npm run bundle`
 
+## 9단계: 도플갱어를 찾고 권한을 거둡니다
+
+* **작동하는 기능**:
+  * **사건 계약 준수 입력 처리**: `src/detect.mjs`에서 `docs/DETECT_EVENTS.md` 계약에 정의된 `at`(시각), `method`(요청 방식), `identity.sub`(가명 사용자) 세 값만 파싱하며, 네트워크·기기·지역 등 계약 외 필드는 배제했습니다. 토큰, 개인정보, 메모 본문은 저장하거나 출력하지 않습니다.
+  * **단시간 대량 조회 탐지 규칙(`burst_read`)**: 동일한 `identity.sub` 사용자의 `GET` 요청이 임의의 10분 구간 내에서 120건을 초과(121건 이상)할 경우 의심 사건으로 판정합니다. 정확히 120건 이하, 다른 사용자의 요청, 10분 밖으로 분산된 요청은 정상(`observe`)으로 판정합니다.
+  * **회수 제안 형식**: 탐지 시 정확히 `{ action: 'propose_revocation', reasonCode: 'burst_read', subject }` 형식만 반환하며 다른 키는 일절 추가하지 않습니다. 정상 사건은 `{ action: 'observe' }`를 반환합니다.
+  * **기존 판정기 및 설정 보존**: `src/decider.mjs`의 허용/거부 응답 형식과 기기 규칙을 온전히 보존하고, `aleph.config.json`의 단계를 `step: 9`로 갱신했습니다.
+* **다시 실행하는 방법 (확인 순서)**:
+  * 로컬 탐지 시험을 실행합니다:
+    ```bash
+    npm run detect:test
+    ```
+  * 시험 결과에서 다음 6개 항목이 모두 `통과`로 출력되는지 확인합니다:
+    * `통과 · 정상 조회 30건`
+    * `통과 · 10분 안에 120건`
+    * `통과 · 10분 안에 121건`
+    * `통과 · 폭주 조회 200건`
+    * `통과 · 서로 다른 사용자 각 100건`
+    * `통과 · 10분 밖으로 흩어진 조회 200건`
+  * 기존 판정기 및 단위 시험 검증:
+    ```bash
+    npm run decider:test
+    npm run fixture:7
+    npm run build -- --local
+    npm run test:r5
+    ```
+  * 제출 묶음 생성:
+    ```bash
+    npm run bundle
+    ```
+
