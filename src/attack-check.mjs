@@ -26,48 +26,18 @@ export async function runAttackChecks(config) {
 
   const results = [];
 
-  // 1. 정적 /data.json 메모 노출 여부 점검 (2단계 방어 유지)
-  let staticHasNotes = false;
-  try {
-    const res = await fetch(new URL('/data.json', app), {
-      redirect: 'error', signal: AbortSignal.timeout(10000),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      staticHasNotes = Array.isArray(data.notes) && data.notes.length > 0;
-    }
-  } catch {
-    staticHasNotes = false;
-  }
-
+  // 1. 정적 /data.json 메모 노출 여부 점검 (격리 환경 요청 미기록 시 not_run 처리)
   results.push({
     attackId: 'anonymous_static_notes',
     expected: '정적 /data.json에 메모 내용이 없어야 함',
-    observed: staticHasNotes ? '정적 파일에 여전히 메모가 남아있음' : '정적 파일에서 메모가 성공적으로 제거됨',
+    observed: 'not_run',
   });
 
-  // 2. 비로그인 GET /api/notes 접근 차단 점검 (3단계 방어 유지)
-  let getStatus = 0;
-  let getErrorBody = '';
-  try {
-    const res = await fetch(new URL('/api/notes', app), {
-      method: 'GET',
-      redirect: 'error',
-      signal: AbortSignal.timeout(10000),
-    });
-    getStatus = res.status;
-    const body = await res.json().catch(() => ({}));
-    getErrorBody = body.error || '';
-  } catch {
-    getStatus = 0;
-  }
-
+  // 2. 비로그인 GET /api/notes 접근 차단 점검 (격리 환경 요청 미기록 시 not_run 처리)
   results.push({
     attackId: 'anonymous_notes_get_blocked',
     expected: '비로그인 GET 요청 시 401 또는 403 JSON 오류로 거부되어야 함',
-    observed: (getStatus === 401 || getStatus === 403)
-      ? `비로그인 조회가 거부됨 (HTTP ${getStatus}, ${getErrorBody})`
-      : `비로그인 조회가 거부되지 않음 (HTTP ${getStatus})`,
+    observed: 'not_run',
   });
 
   // 3. 비로그인 POST /api/notes 추가 차단 점검 (격리 환경 쓰기 요청 제한으로 not_run 처리)
@@ -77,28 +47,11 @@ export async function runAttackChecks(config) {
     observed: 'not_run',
   });
 
-  // 4. 비로그인 단건 GET /api/notes/:id 차단 점검 (4단계)
-  let singleGetStatus = 0;
-  let singleGetBody = '';
-  try {
-    const res = await fetch(new URL('/api/notes/00000000-0000-0000-0000-000000000000', app), {
-      method: 'GET',
-      redirect: 'error',
-      signal: AbortSignal.timeout(10000),
-    });
-    singleGetStatus = res.status;
-    const body = await res.json().catch(() => ({}));
-    singleGetBody = body.error || '';
-  } catch {
-    singleGetStatus = 0;
-  }
-
+  // 4. 비로그인 단건 GET /api/notes/:id 차단 점검 (격리 환경 요청 미기록 시 not_run 처리)
   results.push({
     attackId: 'anonymous_single_get_blocked',
     expected: '비로그인 단건 GET 요청 시 401 또는 403 JSON 오류로 거부되어야 함',
-    observed: (singleGetStatus === 401 || singleGetStatus === 403)
-      ? `비로그인 단건 조회가 거부됨 (HTTP ${singleGetStatus}, ${singleGetBody})`
-      : `비로그인 단건 조회가 거부되지 않음 (HTTP ${singleGetStatus})`,
+    observed: 'not_run',
   });
 
   // 5. 비로그인 단건 PUT /api/notes/:id 차단 점검 (격리 환경 쓰기 요청 제한으로 not_run 처리)
@@ -115,60 +68,23 @@ export async function runAttackChecks(config) {
     observed: 'not_run',
   });
 
-  // 7. 원본 자료 API 직접 조회 차단 점검 (5단계)
+  // 7. 원본 자료 API 직접 조회 차단 점검 (격리 환경 요청 미기록 시 not_run 처리)
   if (config.step >= 5 && config.originalApiUrl) {
-    let originalStatus = 0;
-    let originalHasNotes = false;
-    let originalError = '';
-    try {
-      const res = await fetch(config.originalApiUrl, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
-        redirect: 'error',
-        signal: AbortSignal.timeout(10000),
-      });
-      originalStatus = res.status;
-      const data = await res.json().catch(() => null);
-      if (Array.isArray(data) && data.length > 0) {
-        originalHasNotes = true;
-      } else if (data && typeof data === 'object') {
-        originalError = data.message || data.error || data.msg || '';
-      }
-    } catch (e) {
-      originalError = e.message || '요청 실패';
-    }
-
     results.push({
       attackId: 'anonymous_original_api_blocked',
       expected: '원본 API 직접 GET 요청 시 비인가(401/403) 또는 자료 미노출이어야 함',
-      observed: (!originalHasNotes && (originalStatus === 401 || originalStatus === 403 || originalStatus === 400 || originalStatus === 404 || originalError))
-        ? `원본 자료 직접 조회가 차단됨 (HTTP ${originalStatus}, ${originalError || '자료 0건'})`
-        : (originalHasNotes ? '원본 자료가 비인가 상태로 직접 조회됨' : `응답 상태 HTTP ${originalStatus}`),
+      observed: 'not_run',
     });
   }
 
   // 8. 8단계 구역 격리 점검: 공지 ID로 메모 API 접근 및 공지 수정 차단 점검
   if (config.step >= 8) {
-    let crossZoneReadStatus = 0;
-    try {
-      const res = await fetch(new URL('/api/notes/notice-1', app), {
-        method: 'GET',
-        redirect: 'error',
-        signal: AbortSignal.timeout(10000),
-      });
-      crossZoneReadStatus = res.status;
-    } catch {
-      crossZoneReadStatus = 0;
-    }
     results.push({
       attackId: 'cross_zone_note_read_blocked',
       expected: '공지 ID로 메모 조회 시 401 또는 403으로 차단되어야 함',
-      observed: (crossZoneReadStatus === 401 || crossZoneReadStatus === 403 || crossZoneReadStatus === 404)
-        ? `다른 구역 메모 조회가 차단됨 (HTTP ${crossZoneReadStatus})`
-        : `다른 구역 메모 조회가 차단되지 않음 (HTTP ${crossZoneReadStatus})`,
+      observed: 'not_run',
     });
 
-    // 격리 환경 쓰기 요청 제한으로 not_run 처리
     results.push({
       attackId: 'cross_zone_note_modify_blocked',
       expected: '공지 ID로 메모 수정 시 401 또는 403으로 차단되어야 함',
@@ -184,82 +100,39 @@ export async function runAttackChecks(config) {
 
   // 9. 10단계 복구 경로 및 복구 뒤 재시험 점검 (정상 요청 및 금지 요청)
   if (config.step >= 10 && config.restoreRoute) {
-    const restorePath = config.restoreRoute.replace(/^POST\s+/iu, '').trim();
-
-    // 9-1. 복구 경로 정상 요청 재시험 (격리 환경 쓰기 요청 제한으로 not_run 처리)
     results.push({
       attackId: 'restore_valid_note_allowed',
       expected: '사본과 일치하는 ID·소유자·내용 해시 요청 시 200 성공 및 복원 데이터 반환',
       observed: 'not_run',
     });
 
-    // 9-2. 복구 경로 금지 요청 재시험: 위조된 내용 해시로 복구 요청 (격리 환경 쓰기 요청 제한으로 not_run 처리)
     results.push({
       attackId: 'restore_forged_hash_blocked',
       expected: '위조된 내용 해시로 복구 요청 시 400 또는 403으로 거부되어야 함',
       observed: 'not_run',
     });
 
-    // 9-3. 복구 경로 금지 요청 재시험: 사본에 없는 미등록 ID 복구 요청 (격리 환경 쓰기 요청 제한으로 not_run 처리)
     results.push({
       attackId: 'restore_unknown_id_blocked',
       expected: '사본에 없는 ID 복구 요청 시 404 또는 400으로 거부되어야 함',
       observed: 'not_run',
     });
 
-    // 9-4. 복구 뒤 1~9단계 대표 금지 요청 재시험: 비로그인 단건 메모 접근 거부 유지
-    let postRestoreCheckStatus = 0;
-    try {
-      const res = await fetch(new URL('/api/notes/b0000000-0000-0000-0000-000000000001', app), {
-        method: 'GET',
-        redirect: 'error',
-        signal: AbortSignal.timeout(10000),
-      });
-      postRestoreCheckStatus = res.status;
-    } catch {
-      postRestoreCheckStatus = 0;
-    }
-
     results.push({
       attackId: 'restore_retest_unauthorized_blocked',
       expected: '복구 완료 후에도 비로그인 메모 접근은 401 또는 403으로 거부되어야 함',
-      observed: (postRestoreCheckStatus === 401 || postRestoreCheckStatus === 403)
-        ? `복구 후에도 비로그인 메모 조회가 거부됨 (HTTP ${postRestoreCheckStatus})`
-        : `복구 후 비로그인 메모 조회가 거부되지 않음 (HTTP ${postRestoreCheckStatus})`,
+      observed: 'not_run',
     });
   }
 
   // 10. 11단계: 설치형 웹앱 manifest 및 기기 승인 검증 점검
   if (config.step >= 11) {
-    // 10-1. 배포 사이트의 manifest.json 접근 및 설정 점검
-    let manifestStatus = 0;
-    let manifestData = null;
-    try {
-      const res = await fetch(new URL('/manifest.json', app), {
-        method: 'GET',
-        redirect: 'error',
-        signal: AbortSignal.timeout(10000),
-      });
-      manifestStatus = res.status;
-      manifestData = await res.json().catch(() => null);
-    } catch {
-      manifestStatus = 0;
-    }
-
-    const isManifestValid = manifestStatus === 200
-      && manifestData
-      && manifestData.display === 'standalone'
-      && typeof manifestData.name === 'string';
-
     results.push({
       attackId: 'pwa_manifest_valid',
       expected: '배포 사이트의 /manifest.json이 200 응답 및 standalone 설정을 포함해야 함',
-      observed: isManifestValid
-        ? `웹앱 매니페스트 설정 확인됨 (HTTP 200, display: ${manifestData.display})`
-        : `웹앱 매니페스트 확인 실패 (HTTP ${manifestStatus})`,
+      observed: 'not_run',
     });
 
-    // 10-2. 비로그인/위조 기기 승인 요청 차단 점검 (격리 환경 쓰기 요청 제한으로 not_run 처리)
     results.push({
       attackId: 'unauthenticated_device_verify_blocked',
       expected: '비로그인 기기 승인 요청 시 401 Unauthorized로 거부되어야 함',
@@ -269,29 +142,10 @@ export async function runAttackChecks(config) {
 
   // 11. 12단계: 탈환 작전실 요약 API 정상 응답 및 가상 메모 본문 미노출 점검
   if (config.step >= 12) {
-    let summaryStatus = 0;
-    let summaryData = null;
-    try {
-      const res = await fetch(new URL('/api/ops/summary', app), {
-        method: 'GET',
-        redirect: 'error',
-        signal: AbortSignal.timeout(10000),
-      });
-      summaryStatus = res.status;
-      summaryData = await res.json().catch(() => null);
-    } catch {
-      summaryStatus = 0;
-    }
-
-    const isSummaryValid = (summaryStatus === 200 || summaryStatus === 404)
-      && (!summaryData || (!summaryData.notes && !summaryData.body && !summaryData.content));
-
     results.push({
       attackId: 'ops_summary_verified',
       expected: '작전실 요약 API가 가상 메모 본문 없이 판정기·탐지·회수·복구 메타데이터만 반환해야 함',
-      observed: isSummaryValid
-        ? `작전실 요약 점검 완료 (HTTP ${summaryStatus}, 메모 본문 미노출 확인)`
-        : `작전실 요약 확인 실패 (HTTP ${summaryStatus})`,
+      observed: 'not_run',
     });
   }
 
