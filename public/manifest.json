@@ -1,0 +1,16 @@
+{
+  "name": "BYTE BACK 점령된 자료실",
+  "short_name": "보안자료실",
+  "description": "서버 기기 승인 기반 설치형 보안 자료실 웹앱",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#101a28",
+  "theme_color": "#162233",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23162233'/><text y='65' font-size='60' x='20'>🔒</text></svg>",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

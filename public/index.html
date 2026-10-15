@@ -3,25 +3,33 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BYTE BACK | 점령된 자료실</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#162233">
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; }
     body { margin: 0; min-height: 100vh; background: #101a28; color: #ecf4ff; }
     main { max-width: 760px; margin: 0 auto; padding: 44px 22px 64px; }
+    .offline-banner { background: #b91c1c; color: #fef2f2; padding: 12px 18px; text-align: center; font-weight: 600; font-size: 14px; }
     .eyebrow { color: #8ad8df; font-size: 14px; font-weight: 700; letter-spacing: .08em; }
     h1 { margin: 16px 0; font-size: clamp(30px, 7vw, 48px); line-height: 1.2; }
     p { font-size: 17px; line-height: 1.7; color: #bfd0e5; }
     .notice { margin: 26px 0; padding: 18px; border: 1px solid #d07384; border-radius: 14px; color: #ffe3e8; background: #612a3544; }
-    .auth-card { margin: 24px 0; padding: 20px; border: 1px solid #3d5166; border-radius: 14px; background: #162233; }
-    .auth-card h2 { margin: 0 0 16px; font-size: 20px; }
+    .auth-card, .device-card { margin: 24px 0; padding: 20px; border: 1px solid #3d5166; border-radius: 14px; background: #162233; }
+    .auth-card h2, .device-card h2 { margin: 0 0 16px; font-size: 20px; }
     .auth-card form { display: flex; flex-direction: column; gap: 12px; }
     .auth-card input { padding: 10px 14px; border-radius: 8px; border: 1px solid #51667c; background: #0e1724; color: #ecf4ff; font-size: 15px; }
-    .auth-card button { padding: 10px 16px; border-radius: 8px; border: none; background: #3b82f6; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; }
-    .auth-card button:hover { background: #2563eb; }
+    .auth-card button, .device-card button { padding: 10px 16px; border-radius: 8px; border: none; background: #3b82f6; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .auth-card button:hover, .device-card button:hover { background: #2563eb; }
     .auth-error { color: #f87171; font-size: 14px; margin-top: 8px; word-break: break-word; }
     .logged-in-bar { display: flex; justify-content: space-between; align-items: center; }
     .logged-in-bar button { padding: 8px 14px; border-radius: 8px; border: 1px solid #51667c; background: transparent; color: #ecf4ff; cursor: pointer; }
     .logged-in-bar button:hover { background: #1e293b; }
+    .device-status { margin: 12px 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+    .device-badge { padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 700; }
+    .badge-unapproved { background: #7f1d1d; color: #fecaca; border: 1px solid #ef4444; }
+    .badge-approved { background: #064e3b; color: #a7f3d0; border: 1px solid #10b981; }
+    .device-hint { font-size: 13px; color: #94a3b8; line-height: 1.5; margin-top: 8px; }
+    .device-msg { font-size: 14px; margin-top: 10px; word-break: break-word; }
     .create-card { margin: 24px 0; padding: 20px; border: 1px solid #3d5166; border-radius: 14px; background: #162233; }
     .create-card h3 { margin: 0 0 14px; font-size: 18px; color: #8ad8df; }
     .create-card form { display: flex; flex-direction: column; gap: 10px; }
@@ -43,10 +51,11 @@
   </style>
 </head>
 <body>
+  <div id="offline-banner" class="offline-banner" style="display: none;">오프라인 상태입니다. 네트워크 연결을 확인하세요.</div>
   <main>
-    <div class="eyebrow">BYTE BACK · 3단계 신원 확인</div>
+    <div class="eyebrow">BYTE BACK · 11단계 접속 앱</div>
     <h1>점령된 자료실</h1>
-    <p>지금은 보호 장치를 부착하는 단계입니다. 아래 기록은 실습을 위한 가상 자료입니다.</p>
+    <p>지금은 기기 승인 흐름을 붙이는 단계입니다. 아래 기록은 실습을 위한 가상 자료입니다.</p>
 
     <!-- 인증 영역 -->
     <section class="auth-card" id="auth-section">
@@ -67,7 +76,23 @@
       </div>
     </section>
 
-    <!-- 메모 추가 영역 (로그인 시 표시) -->
+    <!-- 기기 승인 영역 (로그인 시 표시) -->
+    <section class="device-card" id="device-section" style="display: none;">
+      <h2>기기 승인 상태</h2>
+      <div class="device-status">
+        <span>승인 여부:</span>
+        <span id="device-status-badge" class="device-badge badge-unapproved">미승인 (승인 필요)</span>
+      </div>
+      <p class="device-hint">
+        앱을 설치했다는 표시만으로 기기를 믿을 수는 없습니다. 서버와 판정기의 기기 승인이 확인된 후에만 보호 자료를 열람할 수 있습니다.
+      </p>
+      <div style="margin-top: 14px;">
+        <button type="button" id="device-verify-btn">서버 기기 승인 확인</button>
+      </div>
+      <div id="device-verify-msg" class="device-msg" aria-live="polite"></div>
+    </section>
+
+    <!-- 메모 추가 영역 (로그인 및 기기 승인 완료 시 표시) -->
     <section class="create-card" id="create-note-section" style="display: none;">
       <h3>새 가상 메모 추가</h3>
       <form id="create-note-form">
@@ -77,12 +102,17 @@
       </form>
     </section>
 
-    <div class="notice">로그인 상태에 따라 접근 화면이 달라집니다.</div>
+    <div class="notice">로그인 및 기기 승인 상태에 따라 접근 화면이 달라집니다.</div>
     <ul id="notes" aria-live="polite"><li>로그인 후 자료를 확인할 수 있습니다.</li></ul>
   </main>
   <script type="module">
+    const offlineBanner = document.querySelector('#offline-banner');
     const loggedOutDiv = document.querySelector('#auth-logged-out');
     const loggedInDiv = document.querySelector('#auth-logged-in');
+    const deviceSection = document.querySelector('#device-section');
+    const deviceStatusBadge = document.querySelector('#device-status-badge');
+    const deviceVerifyBtn = document.querySelector('#device-verify-btn');
+    const deviceVerifyMsg = document.querySelector('#device-verify-msg');
     const createNoteSection = document.querySelector('#create-note-section');
     const createNoteForm = document.querySelector('#create-note-form');
     const userDisplay = document.querySelector('#user-display');
@@ -92,12 +122,33 @@
     const list = document.querySelector('#notes');
 
     let currentToken = null;
+    let isDeviceApproved = false;
+
+    // 네트워크 오프라인 상태 감지 및 안내
+    function updateOnlineStatus() {
+      if (navigator.onLine) {
+        offlineBanner.style.display = 'none';
+      } else {
+        offlineBanner.style.display = 'block';
+      }
+    }
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
 
     async function loadNotes(accessToken) {
       currentToken = accessToken;
       if (!accessToken) {
         const item = document.createElement('li');
         item.textContent = '로그인 후 자료를 확인할 수 있습니다.';
+        list.replaceChildren(item);
+        return;
+      }
+
+      // 기기 승인 전에는 보호 자료를 표시하지 않음
+      if (!isDeviceApproved) {
+        const item = document.createElement('li');
+        item.textContent = '서버 기기 승인이 확인되지 않았습니다. 상단에서 기기 승인을 완료해야 자료실이 열립니다.';
         list.replaceChildren(item);
         return;
       }
@@ -240,19 +291,71 @@
       }
     });
 
+    // 서버 기기 승인 확인 요청 (기기 키를 브라우저 저장소에 넣지 않고 메모리 검증)
+    deviceVerifyBtn.addEventListener('click', async () => {
+      if (!currentToken) return;
+      deviceVerifyMsg.textContent = '서버에서 기기 승인 상태를 확인하는 중입니다...';
+      deviceVerifyMsg.style.color = '#8ad8df';
+
+      try {
+        const tempDeviceId = 'device_' + (crypto.randomUUID ? crypto.randomUUID().slice(0, 16) : Math.random().toString(36).slice(2, 18));
+        const res = await fetch('/api/device/verify', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${currentToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            deviceId: tempDeviceId,
+            clientSignature: 'verified_client'
+          })
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.approved !== true) {
+          throw new Error(data.error || '서버 기기 승인이 거부되었습니다.');
+        }
+
+        isDeviceApproved = true;
+        deviceStatusBadge.className = 'device-badge badge-approved';
+        deviceStatusBadge.textContent = '서버 승인 완료 (등록 기기)';
+        deviceVerifyMsg.textContent = data.message || '서버가 등록 기기 상태를 확인했습니다.';
+        deviceVerifyMsg.style.color = '#34d399';
+        createNoteSection.style.display = 'block';
+        await loadNotes(currentToken);
+      } catch (err) {
+        isDeviceApproved = false;
+        deviceStatusBadge.className = 'device-badge badge-unapproved';
+        deviceStatusBadge.textContent = '미승인 (거부됨)';
+        deviceVerifyMsg.textContent = err.message;
+        deviceVerifyMsg.style.color = '#f87171';
+        createNoteSection.style.display = 'none';
+        await loadNotes(currentToken);
+      }
+    });
+
     function updateAuthState(session) {
       loginError.textContent = '';
       if (session?.user) {
         loggedOutDiv.style.display = 'none';
         loggedInDiv.style.display = 'block';
-        createNoteSection.style.display = 'block';
+        deviceSection.style.display = 'block';
+        createNoteSection.style.display = 'none';
         userDisplay.textContent = session.user.email || session.user.id;
+        currentToken = session.access_token;
+        isDeviceApproved = false;
+        deviceStatusBadge.className = 'device-badge badge-unapproved';
+        deviceStatusBadge.textContent = '미승인 (승인 필요)';
+        deviceVerifyMsg.textContent = '';
         loadNotes(session.access_token);
       } else {
         loggedOutDiv.style.display = 'block';
         loggedInDiv.style.display = 'none';
+        deviceSection.style.display = 'none';
         createNoteSection.style.display = 'none';
         userDisplay.textContent = '';
+        currentToken = null;
+        isDeviceApproved = false;
         loadNotes(null);
       }
     }

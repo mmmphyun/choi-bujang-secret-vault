@@ -1,5 +1,5 @@
 {
-  "step": 10,
+  "step": 11,
   "repoUrl": "https://github.com/mmmphyun/choi-bujang-secret-vault",
   "publicAppUrl": "https://choi-bujang-secret-vault-evun.vercel.app",
   "sampleMarker": "SAMPLE_NOTE_1",
@@ -11,6 +11,7 @@
   },
   "allowedRoutes": [
     "POST /api/auth",
+    "POST /api/device/verify",
     "GET /api/notes/:id",
     "PUT /api/notes/:id",
     "DELETE /api/notes/:id",

@@ -1,5 +1,5 @@
 export async function runAttackChecks(config) {
-  if (config.step !== 1 && config.step !== 3 && config.step !== 4 && config.step !== 5 && config.step !== 6 && config.step !== 7 && config.step !== 8 && config.step !== 9 && config.step !== 10) {
+  if (config.step !== 1 && config.step !== 3 && config.step !== 4 && config.step !== 5 && config.step !== 6 && config.step !== 7 && config.step !== 8 && config.step !== 9 && config.step !== 10 && config.step !== 11) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   let app;
@@ -378,6 +378,63 @@ export async function runAttackChecks(config) {
       observed: (postRestoreCheckStatus === 401 || postRestoreCheckStatus === 403)
         ? `복구 후에도 비로그인 메모 조회가 거부됨 (HTTP ${postRestoreCheckStatus})`
         : `복구 후 비로그인 메모 조회가 거부되지 않음 (HTTP ${postRestoreCheckStatus})`,
+    });
+  }
+
+  // 10. 11단계: 설치형 웹앱 manifest 및 기기 승인 검증 점검
+  if (config.step >= 11) {
+    // 10-1. 배포 사이트의 manifest.json 접근 및 설정 점검
+    let manifestStatus = 0;
+    let manifestData = null;
+    try {
+      const res = await fetch(new URL('/manifest.json', app), {
+        method: 'GET',
+        redirect: 'error',
+        signal: AbortSignal.timeout(10000),
+      });
+      manifestStatus = res.status;
+      manifestData = await res.json().catch(() => null);
+    } catch {
+      manifestStatus = 0;
+    }
+
+    const isManifestValid = manifestStatus === 200
+      && manifestData
+      && manifestData.display === 'standalone'
+      && typeof manifestData.name === 'string';
+
+    results.push({
+      attackId: 'pwa_manifest_valid',
+      expected: '배포 사이트의 /manifest.json이 200 응답 및 standalone 설정을 포함해야 함',
+      observed: isManifestValid
+        ? `웹앱 매니페스트 설정 확인됨 (HTTP 200, display: ${manifestData.display})`
+        : `웹앱 매니페스트 확인 실패 (HTTP ${manifestStatus})`,
+    });
+
+    // 10-2. 비로그인/위조 기기 승인 요청 차단 점검
+    let deviceVerifyStatus = 0;
+    let deviceVerifyErrorMsg = '';
+    try {
+      const res = await fetch(new URL('/api/device/verify', app), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId: 'unauthorized_device_test' }),
+        redirect: 'error',
+        signal: AbortSignal.timeout(10000),
+      });
+      deviceVerifyStatus = res.status;
+      const b = await res.json().catch(() => ({}));
+      deviceVerifyErrorMsg = b.error || '';
+    } catch {
+      deviceVerifyStatus = 0;
+    }
+
+    results.push({
+      attackId: 'unauthenticated_device_verify_blocked',
+      expected: '비로그인 기기 승인 요청 시 401 Unauthorized로 거부되어야 함',
+      observed: (deviceVerifyStatus === 401 || deviceVerifyStatus === 403)
+        ? `비로그인 기기 승인이 거부됨 (HTTP ${deviceVerifyStatus}, ${deviceVerifyErrorMsg})`
+        : `비로그인 기기 승인이 거부되지 않음 (HTTP ${deviceVerifyStatus})`,
     });
   }
 
