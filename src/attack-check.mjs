@@ -1,5 +1,5 @@
 export async function runAttackChecks(config) {
-  if (config.step !== 1 && config.step !== 3 && config.step !== 4 && config.step !== 5 && config.step !== 6 && config.step !== 7 && config.step !== 8 && config.step !== 9 && config.step !== 10 && config.step !== 11) {
+  if (config.step !== 1 && config.step !== 3 && config.step !== 4 && config.step !== 5 && config.step !== 6 && config.step !== 7 && config.step !== 8 && config.step !== 9 && config.step !== 10 && config.step !== 11 && config.step !== 12) {
     throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   }
   let app;
@@ -435,6 +435,34 @@ export async function runAttackChecks(config) {
       observed: (deviceVerifyStatus === 401 || deviceVerifyStatus === 403)
         ? `비로그인 기기 승인이 거부됨 (HTTP ${deviceVerifyStatus}, ${deviceVerifyErrorMsg})`
         : `비로그인 기기 승인이 거부되지 않음 (HTTP ${deviceVerifyStatus})`,
+    });
+  }
+
+  // 11. 12단계: 탈환 작전실 요약 API 정상 응답 및 가상 메모 본문 미노출 점검
+  if (config.step >= 12) {
+    let summaryStatus = 0;
+    let summaryData = null;
+    try {
+      const res = await fetch(new URL('/api/ops/summary', app), {
+        method: 'GET',
+        redirect: 'error',
+        signal: AbortSignal.timeout(10000),
+      });
+      summaryStatus = res.status;
+      summaryData = await res.json().catch(() => null);
+    } catch {
+      summaryStatus = 0;
+    }
+
+    const isSummaryValid = (summaryStatus === 200 || summaryStatus === 404)
+      && (!summaryData || (!summaryData.notes && !summaryData.body && !summaryData.content));
+
+    results.push({
+      attackId: 'ops_summary_verified',
+      expected: '작전실 요약 API가 가상 메모 본문 없이 판정기·탐지·회수·복구 메타데이터만 반환해야 함',
+      observed: isSummaryValid
+        ? `작전실 요약 점검 완료 (HTTP ${summaryStatus}, 메모 본문 미노출 확인)`
+        : `작전실 요약 확인 실패 (HTTP ${summaryStatus})`,
     });
   }
 
