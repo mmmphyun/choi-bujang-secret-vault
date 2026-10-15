@@ -306,8 +306,7 @@
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            deviceId: tempDeviceId,
-            clientSignature: 'verified_client'
+            deviceId: tempDeviceId
           })
         });
 
@@ -376,7 +375,7 @@
         if (!res.ok) {
           throw new Error(data.error || '로그인에 실패했습니다.');
         }
-        sessionStorage.setItem('auth_session', JSON.stringify(data));
+        // 기기 키나 토큰은 브라우저 저장소에 넣지 않고 인메모리 상태로만 유지
         updateAuthState(data);
       } catch (error) {
         loginError.textContent = error.message;
@@ -384,15 +383,19 @@
     });
 
     logoutBtn.addEventListener('click', () => {
-      sessionStorage.removeItem('auth_session');
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+      } catch {}
       updateAuthState(null);
     });
 
-    let savedSession = null;
+    // 브라우저 저장소 비우기 및 초기 인메모리 인증 상태 설정
     try {
-      savedSession = JSON.parse(sessionStorage.getItem('auth_session'));
+      localStorage.clear();
+      sessionStorage.clear();
     } catch {}
-    updateAuthState(savedSession);
+    updateAuthState(null);
   </script>
 </body>
 </html>
