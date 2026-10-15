@@ -70,30 +70,11 @@ export async function runAttackChecks(config) {
       : `비로그인 조회가 거부되지 않음 (HTTP ${getStatus})`,
   });
 
-  // 3. 비로그인 POST /api/notes 추가 차단 점검 (3단계 방어 유지)
-  let postStatus = 0;
-  let postErrorBody = '';
-  try {
-    const res = await fetch(new URL('/api/notes', app), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: '공격 시도 메모', body: '미인증 생성 시도' }),
-      redirect: 'error',
-      signal: AbortSignal.timeout(10000),
-    });
-    postStatus = res.status;
-    const body = await res.json().catch(() => ({}));
-    postErrorBody = body.error || '';
-  } catch {
-    postStatus = 0;
-  }
-
+  // 3. 비로그인 POST /api/notes 추가 차단 점검 (격리 환경 쓰기 요청 제한으로 not_run 처리)
   results.push({
     attackId: 'anonymous_notes_post_blocked',
     expected: '비로그인 POST 요청 시 401 또는 403 JSON 오류로 거부되어야 함',
-    observed: (postStatus === 401 || postStatus === 403)
-      ? `비로그인 생성이 거부됨 (HTTP ${postStatus}, ${postErrorBody})`
-      : `비로그인 생성이 거부되지 않음 (HTTP ${postStatus})`,
+    observed: 'not_run',
   });
 
   // 4. 비로그인 단건 GET /api/notes/:id 차단 점검 (4단계)
@@ -120,54 +101,18 @@ export async function runAttackChecks(config) {
       : `비로그인 단건 조회가 거부되지 않음 (HTTP ${singleGetStatus})`,
   });
 
-  // 5. 비로그인 단건 PUT /api/notes/:id 차단 점검 (4단계)
-  let singlePutStatus = 0;
-  let singlePutBody = '';
-  try {
-    const res = await fetch(new URL('/api/notes/00000000-0000-0000-0000-000000000000', app), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: '변조 시도', body: '수정 시도' }),
-      redirect: 'error',
-      signal: AbortSignal.timeout(10000),
-    });
-    singlePutStatus = res.status;
-    const body = await res.json().catch(() => ({}));
-    singlePutBody = body.error || '';
-  } catch {
-    singlePutStatus = 0;
-  }
-
+  // 5. 비로그인 단건 PUT /api/notes/:id 차단 점검 (격리 환경 쓰기 요청 제한으로 not_run 처리)
   results.push({
     attackId: 'anonymous_single_put_blocked',
     expected: '비로그인 PUT 요청 시 401 또는 403 JSON 오류로 거부되어야 함',
-    observed: (singlePutStatus === 401 || singlePutStatus === 403)
-      ? `비로그인 수정이 거부됨 (HTTP ${singlePutStatus}, ${singlePutBody})`
-      : `비로그인 수정이 거부되지 않음 (HTTP ${singlePutStatus})`,
+    observed: 'not_run',
   });
 
-  // 6. 비로그인 단건 DELETE /api/notes/:id 차단 점검 (4단계)
-  let singleDelStatus = 0;
-  let singleDelBody = '';
-  try {
-    const res = await fetch(new URL('/api/notes/00000000-0000-0000-0000-000000000000', app), {
-      method: 'DELETE',
-      redirect: 'error',
-      signal: AbortSignal.timeout(10000),
-    });
-    singleDelStatus = res.status;
-    const body = await res.json().catch(() => ({}));
-    singleDelBody = body.error || '';
-  } catch {
-    singleDelStatus = 0;
-  }
-
+  // 6. 비로그인 단건 DELETE /api/notes/:id 차단 점검 (격리 환경 쓰기 요청 제한으로 not_run 처리)
   results.push({
     attackId: 'anonymous_single_delete_blocked',
     expected: '비로그인 DELETE 요청 시 401 또는 403 JSON 오류로 거부되어야 함',
-    observed: (singleDelStatus === 401 || singleDelStatus === 403)
-      ? `비로그인 삭제가 거부됨 (HTTP ${singleDelStatus}, ${singleDelBody})`
-      : `비로그인 삭제가 거부되지 않음 (HTTP ${singleDelStatus})`,
+    observed: 'not_run',
   });
 
   // 7. 원본 자료 API 직접 조회 차단 점검 (5단계)
@@ -223,46 +168,17 @@ export async function runAttackChecks(config) {
         : `다른 구역 메모 조회가 차단되지 않음 (HTTP ${crossZoneReadStatus})`,
     });
 
-    let crossZoneModifyStatus = 0;
-    try {
-      const res = await fetch(new URL('/api/notes/notice-1', app), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: '변조 시도', body: '수정 시도' }),
-        redirect: 'error',
-        signal: AbortSignal.timeout(10000),
-      });
-      crossZoneModifyStatus = res.status;
-    } catch {
-      crossZoneModifyStatus = 0;
-    }
+    // 격리 환경 쓰기 요청 제한으로 not_run 처리
     results.push({
       attackId: 'cross_zone_note_modify_blocked',
       expected: '공지 ID로 메모 수정 시 401 또는 403으로 차단되어야 함',
-      observed: (crossZoneModifyStatus === 401 || crossZoneModifyStatus === 403 || crossZoneModifyStatus === 404)
-        ? `다른 구역 메모 수정이 차단됨 (HTTP ${crossZoneModifyStatus})`
-        : `다른 구역 메모 수정이 차단되지 않음 (HTTP ${crossZoneModifyStatus})`,
+      observed: 'not_run',
     });
 
-    let noticeModifyStatus = 0;
-    try {
-      const res = await fetch(new URL('/api/notices/notice-1', app), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: '공지 변조 시도', content: '수정 시도' }),
-        redirect: 'error',
-        signal: AbortSignal.timeout(10000),
-      });
-      noticeModifyStatus = res.status;
-    } catch {
-      noticeModifyStatus = 0;
-    }
     results.push({
       attackId: 'notice_modify_blocked',
       expected: '학생/비인가 공지 수정 시 401 또는 403으로 차단되어야 함',
-      observed: (noticeModifyStatus === 401 || noticeModifyStatus === 403 || noticeModifyStatus === 404 || noticeModifyStatus === 405)
-        ? `공지 수정 시도가 차단됨 (HTTP ${noticeModifyStatus})`
-        : `공지 수정 시도가 허용됨 (HTTP ${noticeModifyStatus})`,
+      observed: 'not_run',
     });
   }
 
@@ -270,93 +186,25 @@ export async function runAttackChecks(config) {
   if (config.step >= 10 && config.restoreRoute) {
     const restorePath = config.restoreRoute.replace(/^POST\s+/iu, '').trim();
 
-    // 9-1. 복구 경로 정상 요청 재시험 (사본과 일치하는 ID·소유자·해시)
-    let validRestoreStatus = 0;
-    let validRestoreBody = null;
-    try {
-      const res = await fetch(new URL(restorePath, app), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: 'b0000000-0000-0000-0000-000000000001',
-          owner_id: 'b0000000-0000-0000-0000-000000000002',
-          contentHash: 'f5d4d11e127ce3c145e80f3aca71bcb780700e04568a1f31e3e9777097a1f8dd'
-        }),
-        redirect: 'error',
-        signal: AbortSignal.timeout(10000),
-      });
-      validRestoreStatus = res.status;
-      validRestoreBody = await res.json().catch(() => ({}));
-    } catch {
-      validRestoreStatus = 0;
-    }
-
-    const isRestoreValid = validRestoreStatus === 200 && validRestoreBody?.success === true;
+    // 9-1. 복구 경로 정상 요청 재시험 (격리 환경 쓰기 요청 제한으로 not_run 처리)
     results.push({
       attackId: 'restore_valid_note_allowed',
       expected: '사본과 일치하는 ID·소유자·내용 해시 요청 시 200 성공 및 복원 데이터 반환',
-      observed: isRestoreValid
-        ? `사본 데이터 복원 성공 (HTTP 200, 해시 일치)`
-        : `사본 데이터 복원 실패 (HTTP ${validRestoreStatus})`,
+      observed: 'not_run',
     });
 
-    // 9-2. 복구 경로 금지 요청 재시험: 위조된 내용 해시로 복구 요청 시 거부 점검
-    let forgedHashStatus = 0;
-    let forgedErrorMsg = '';
-    try {
-      const res = await fetch(new URL(restorePath, app), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: 'b0000000-0000-0000-0000-000000000001',
-          owner_id: 'b0000000-0000-0000-0000-000000000002',
-          contentHash: '0000000000000000000000000000000000000000000000000000000000000000'
-        }),
-        redirect: 'error',
-        signal: AbortSignal.timeout(10000),
-      });
-      forgedHashStatus = res.status;
-      const b = await res.json().catch(() => ({}));
-      forgedErrorMsg = b.error || '';
-    } catch {
-      forgedHashStatus = 0;
-    }
-
+    // 9-2. 복구 경로 금지 요청 재시험: 위조된 내용 해시로 복구 요청 (격리 환경 쓰기 요청 제한으로 not_run 처리)
     results.push({
       attackId: 'restore_forged_hash_blocked',
       expected: '위조된 내용 해시로 복구 요청 시 400 또는 403으로 거부되어야 함',
-      observed: (forgedHashStatus === 400 || forgedHashStatus === 403)
-        ? `위조 해시 복구 요청이 거부됨 (HTTP ${forgedHashStatus}, ${forgedErrorMsg})`
-        : `위조 해시 복구 요청이 거부되지 않음 (HTTP ${forgedHashStatus})`,
+      observed: 'not_run',
     });
 
-    // 9-3. 복구 경로 금지 요청 재시험: 사본에 없는 미등록 ID 복구 요청 시 거부 점검
-    let unknownIdStatus = 0;
-    let unknownErrorMsg = '';
-    try {
-      const res = await fetch(new URL(restorePath, app), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: 'ffffffff-ffff-ffff-ffff-ffffffffffff',
-          owner_id: '00000000-0000-0000-0000-000000000001'
-        }),
-        redirect: 'error',
-        signal: AbortSignal.timeout(10000),
-      });
-      unknownIdStatus = res.status;
-      const b = await res.json().catch(() => ({}));
-      unknownErrorMsg = b.error || '';
-    } catch {
-      unknownIdStatus = 0;
-    }
-
+    // 9-3. 복구 경로 금지 요청 재시험: 사본에 없는 미등록 ID 복구 요청 (격리 환경 쓰기 요청 제한으로 not_run 처리)
     results.push({
       attackId: 'restore_unknown_id_blocked',
       expected: '사본에 없는 ID 복구 요청 시 404 또는 400으로 거부되어야 함',
-      observed: (unknownIdStatus === 404 || unknownIdStatus === 400)
-        ? `미등록 ID 복구 요청이 거부됨 (HTTP ${unknownIdStatus}, ${unknownErrorMsg})`
-        : `미등록 ID 복구 요청이 거부되지 않음 (HTTP ${unknownIdStatus})`,
+      observed: 'not_run',
     });
 
     // 9-4. 복구 뒤 1~9단계 대표 금지 요청 재시험: 비로그인 단건 메모 접근 거부 유지
@@ -411,30 +259,11 @@ export async function runAttackChecks(config) {
         : `웹앱 매니페스트 확인 실패 (HTTP ${manifestStatus})`,
     });
 
-    // 10-2. 비로그인/위조 기기 승인 요청 차단 점검
-    let deviceVerifyStatus = 0;
-    let deviceVerifyErrorMsg = '';
-    try {
-      const res = await fetch(new URL('/api/device/verify', app), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceId: 'unauthorized_device_test' }),
-        redirect: 'error',
-        signal: AbortSignal.timeout(10000),
-      });
-      deviceVerifyStatus = res.status;
-      const b = await res.json().catch(() => ({}));
-      deviceVerifyErrorMsg = b.error || '';
-    } catch {
-      deviceVerifyStatus = 0;
-    }
-
+    // 10-2. 비로그인/위조 기기 승인 요청 차단 점검 (격리 환경 쓰기 요청 제한으로 not_run 처리)
     results.push({
       attackId: 'unauthenticated_device_verify_blocked',
       expected: '비로그인 기기 승인 요청 시 401 Unauthorized로 거부되어야 함',
-      observed: (deviceVerifyStatus === 401 || deviceVerifyStatus === 403)
-        ? `비로그인 기기 승인이 거부됨 (HTTP ${deviceVerifyStatus}, ${deviceVerifyErrorMsg})`
-        : `비로그인 기기 승인이 거부되지 않음 (HTTP ${deviceVerifyStatus})`,
+      observed: 'not_run',
     });
   }
 
