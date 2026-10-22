@@ -1,23 +1,48 @@
 /**
  * 15단계: 접속 기록 및 XDR 경보 목록과 상세 보기 확장
- * 대상 함수: renderEvents
+ * 대상 함수: createStudentView, renderEvents
  */
 
 /**
- * 상태값 한국어 변환 헬퍼 (unknown은 '확인 불가(unknown)'로 정확히 매핑)
+ * 상태값(state: access, session, device) 한국어 설명 및 원래 코드 보존 헬퍼
+ * @param {'access'|'session'|'device'} type 
  * @param {string} val 
  * @returns {string}
  */
-function formatStateValue(val) {
+export function formatStateValue(type, val) {
   if (!val || val === 'unknown') {
     return '확인 불가(unknown)';
   }
-  if (val === 'allowed') {
-    return '허용(allowed)';
+
+  // 1. 접속(access) 상태
+  if (type === 'access') {
+    if (val === 'allowed') return '허용(allowed)';
+    if (val === 'denied') return '거부(denied)';
+    return `${val}`;
   }
-  if (val === 'denied') {
-    return '거부(denied)';
+
+  // 2. 세션(session) 상태 (13단계 계약)
+  if (type === 'session') {
+    if (val === 'active') return '유효(active)';
+    if (val === 'valid') return '유효(valid)';
+    if (val === 'expired') return '만료(expired)';
+    if (val === 'revoked') return '회수(revoked)';
+    if (val === 'step_up' || val === 'step_up_required') return '추가 인증 필요(step_up_required)';
+    if (val === 'invalid') return '유효하지 않음(invalid)';
+    return `${val}`;
   }
+
+  // 3. 기기(device) 상태 (13단계 계약)
+  if (type === 'device') {
+    if (val === 'registered') return '등록됨(registered)';
+    if (val === 'approved') return '승인됨(approved)';
+    if (val === 'unregistered') return '미등록(unregistered)';
+    if (val === 'unapproved') return '미승인(unapproved)';
+    if (val === 'blocked') return '차단됨(blocked)';
+    if (val === 'denied') return '거부됨(denied)';
+    return `${val}`;
+  }
+
   return String(val);
 }
 
@@ -26,7 +51,7 @@ function formatStateValue(val) {
  * @param {string} kind 
  * @returns {string}
  */
-function formatKind(kind) {
+export function formatKind(kind) {
   if (kind === 'access') {
     return '접속 기록 (access)';
   }
@@ -38,64 +63,86 @@ function formatKind(kind) {
 
 /**
  * 접속 기록 및 XDR 경보 목록과 상세 정보 렌더링 함수
+ * 독립적인 DOM 요소를 생성하여 반환하며, targetContainer가 주어지면 기존 내용을 교체하여 마운트합니다.
  * 
  * @param {Object} params
- * @param {'ok'|'error'|'CONTRACT_MISMATCH'} params.status
+ * @param {'ok'|'error'|'loading'|'CONTRACT_MISMATCH'} params.status
  * @param {string} [params.mode]
  * @param {Array<Object>} [params.data]
  * @param {Object|string} [params.error]
  * @param {HTMLElement} [targetContainer]
+ * @returns {HTMLElement} 생성된 최상위 뷰 요소
  */
 export function renderEvents({ status, mode, data, error }, targetContainer) {
   const container = targetContainer ||
     document.getElementById('events-container') ||
     document.getElementById('student-events') ||
-    document.querySelector('[data-student-events]') ||
-    document.body;
+    document.querySelector('[data-student-events]');
 
-  // 1. 이전 렌더링 내용 및 상세 선택 완전 초기화
-  container.textContent = '';
+  // 이전 컨테이너 내용 비우기
+  if (container) {
+    container.textContent = '';
+  }
 
-  // 2. 계약 불일치 상태 처리 (확인 불가, 이전 목록 제거)
-  if (status === 'CONTRACT_MISMATCH') {
+  // 1. 계약 불일치 상태 처리 (status가 CONTRACT_MISMATCH이거나 error.code가 CONTRACT_MISMATCH인 경우)
+  if (status === 'CONTRACT_MISMATCH' || error?.code === 'CONTRACT_MISMATCH') {
     const mismatchEl = document.createElement('div');
     mismatchEl.className = 'events-contract-mismatch';
     mismatchEl.textContent = '확인 불가(CONTRACT_MISMATCH): 계약 불일치 상태입니다.';
-    container.appendChild(mismatchEl);
-    return;
+    if (container) container.appendChild(mismatchEl);
+    return mismatchEl;
   }
 
-  // 3. 오류 상태 처리 (조회 실패 안내 및 에러 메시지 노출)
+  // 2. 로딩 상태 별도 처리 (status 또는 mode가 loading인 경우)
+  if (status === 'loading' || mode === 'loading') {
+    const loadingEl = document.createElement('div');
+    loadingEl.className = 'events-loading';
+    loadingEl.textContent = '기록을 불러오는 중입니다...';
+    if (container) container.appendChild(loadingEl);
+    return loadingEl;
+  }
+
+  // 3. 일반 오류 상태 처리
   if (status === 'error') {
     const errorEl = document.createElement('div');
     errorEl.className = 'events-error';
     const errorMsg = error && typeof error === 'object' && error.message ? error.message : String(error || '');
     errorEl.textContent = `기록을 불러오지 못했습니다: ${errorMsg}`.trim();
-    container.appendChild(errorEl);
-    return;
+    if (container) container.appendChild(errorEl);
+    return errorEl;
   }
 
-  // 4. 정상 응답이나 데이터가 비어 있는 경우 처리
-  if (!Array.isArray(data) || data.length === 0) {
+  // 4. status가 ok인 빈 배열 상태 처리 (빈 목록 안내 단독 표시)
+  if (status === 'ok' && (!Array.isArray(data) || data.length === 0)) {
     const emptyEl = document.createElement('div');
     emptyEl.className = 'events-empty';
     emptyEl.textContent = '표시할 기록이 없습니다';
-    container.appendChild(emptyEl);
-    return;
+    if (container) container.appendChild(emptyEl);
+    return emptyEl;
+  }
+
+  // 데이터 기본 보정
+  const eventList = Array.isArray(data) ? data : [];
+  if (eventList.length === 0) {
+    const emptyEl = document.createElement('div');
+    emptyEl.className = 'events-empty';
+    emptyEl.textContent = '표시할 기록이 없습니다';
+    if (container) container.appendChild(emptyEl);
+    return emptyEl;
   }
 
   // 5. 원본 배열 보존 및 at 기준 최신순 복사 정렬
-  const rawEvents = [...data].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  const rawEvents = [...eventList].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
-  // 필터 상태 (컴포넌트 렌더링 스코프)
+  // 필터 및 상세 선택 상태
   let filterKind = 'all';
   let filterApp = 'all';
   let filterAccess = 'all';
   let selectedDetailId = null;
 
-  // 메인 래퍼 생성
-  const wrapper = document.createElement('div');
-  wrapper.className = 'student-events-wrapper';
+  // 독립 루트 래퍼 요소 생성
+  const rootWrapper = document.createElement('div');
+  rootWrapper.className = 'student-events-wrapper';
 
   // 6. 필터 컨트롤 영역 구성
   const filterSection = document.createElement('section');
@@ -167,7 +214,7 @@ export function renderEvents({ status, mode, data, error }, targetContainer) {
   for (const st of uniqueAccessStates) {
     const opt = document.createElement('option');
     opt.value = st;
-    opt.textContent = formatStateValue(st);
+    opt.textContent = formatStateValue('access', st);
     accessSelect.appendChild(opt);
   }
   accessFilterWrap.appendChild(accessLabel);
@@ -176,17 +223,17 @@ export function renderEvents({ status, mode, data, error }, targetContainer) {
   filterSection.appendChild(kindFilterWrap);
   filterSection.appendChild(appFilterWrap);
   filterSection.appendChild(accessFilterWrap);
-  wrapper.appendChild(filterSection);
+  rootWrapper.appendChild(filterSection);
 
   // 건수 요약 표시 요소
   const countSummary = document.createElement('div');
   countSummary.className = 'events-count-summary';
-  wrapper.appendChild(countSummary);
+  rootWrapper.appendChild(countSummary);
 
   // 목록 컨테이너
   const listContainer = document.createElement('div');
   listContainer.className = 'student-events-list';
-  wrapper.appendChild(listContainer);
+  rootWrapper.appendChild(listContainer);
 
   // 7. 목록 및 상세 렌더링 함수
   function renderList() {
@@ -306,29 +353,27 @@ export function renderEvents({ status, mode, data, error }, targetContainer) {
         }
         detailSec.appendChild(rulesUl);
 
-        // 3) 세 가지 상태 (state: access, session, device)
+        // 3) 세 가지 상태 (state: access, session, device) - 한국어 설명 및 원래 코드 보존
         const stateTitle = document.createElement('h5');
         stateTitle.textContent = '상태 정보 (state)';
         detailSec.appendChild(stateTitle);
         const stateUl = document.createElement('ul');
 
         const accessLi = document.createElement('li');
-        accessLi.textContent = `접속 상태 (access): ${formatStateValue(ev.state?.access)}`;
+        accessLi.textContent = `접속 상태 (access): ${formatStateValue('access', ev.state?.access)}`;
         stateUl.appendChild(accessLi);
 
         const sessionLi = document.createElement('li');
-        sessionLi.textContent = `세션 상태 (session): ${formatStateValue(ev.state?.session)}`;
+        sessionLi.textContent = `세션 상태 (session): ${formatStateValue('session', ev.state?.session)}`;
         stateUl.appendChild(sessionLi);
 
         const deviceLi = document.createElement('li');
-        deviceLi.textContent = `기기 상태 (device): ${formatStateValue(ev.state?.device)}`;
+        deviceLi.textContent = `기기 상태 (device): ${formatStateValue('device', ev.state?.device)}`;
         stateUl.appendChild(deviceLi);
 
         detailSec.appendChild(stateUl);
 
-        // 조치 버튼: supportedActions가 비어있으면 조치 버튼을 일체 생성하지 않음
-        // (15단계 범위: supportedActions 빈 배열 시 버튼 미추가 규정 엄수)
-
+        // 15단계 범위: supportedActions가 비어있으면 조치 버튼을 일체 생성하지 않음
         row.appendChild(detailSec);
       }
 
@@ -350,7 +395,24 @@ export function renderEvents({ status, mode, data, error }, targetContainer) {
     renderList();
   });
 
-  // 초기 목록 렌더링
+  // 초기 렌더링
   renderList();
-  container.appendChild(wrapper);
+
+  if (container) {
+    container.appendChild(rootWrapper);
+  }
+
+  return rootWrapper;
+}
+
+/**
+ * 제공 시작 틀의 학생 뷰 생성 함수
+ * 학생 표시 함수(renderEvents)를 포함하는 객체를 반환합니다.
+ * 
+ * @returns {{ renderEvents: typeof renderEvents }}
+ */
+export function createStudentView() {
+  return {
+    renderEvents
+  };
 }

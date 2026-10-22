@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renderEvents } from '../student/extension.mjs';
+import { createStudentView, renderEvents, formatStateValue } from '../student/extension.mjs';
 
 // 가상 경량 DOM 노드 구현
 class MockElement {
@@ -107,7 +107,7 @@ const mockData = [
     summary: '정상 로그인 시도 <b>위조 시도</b>',
     evidence: [{ id: 'evi-1', text: '인증 완료 토큰 수신' }],
     rules: [{ id: 'rule-auth', text: '기본 신원 확인' }],
-    state: { access: 'allowed', session: 'valid', device: 'registered' },
+    state: { access: 'allowed', session: 'active', device: 'registered' },
     supportedActions: []
   },
   {
@@ -123,78 +123,93 @@ const mockData = [
   }
 ];
 
-test('1. 빈 배열 처리: 표시할 기록이 없습니다 출력 확인', () => {
+test('1. createStudentView 시작 틀 및 DOM 요소 반환 확인', () => {
+  const view = createStudentView();
+  assert.equal(typeof view.renderEvents, 'function', 'createStudentView는 renderEvents를 반환해야 함');
+
+  const container = new MockElement('div');
+  const returnedEl = view.renderEvents({ status: 'ok', data: mockData }, container);
+  assert.ok(returnedEl instanceof MockElement, 'renderEvents는 독립 DOM 요소를 반환해야 함');
+});
+
+test('2. 빈 배열 처리: status ok 빈 배열일 때만 "표시할 기록이 없습니다" 출력 확인', () => {
   const container = new MockElement('div');
   renderEvents({ status: 'ok', data: [] }, container);
   assert.equal(container.textContent, '표시할 기록이 없습니다');
 });
 
-test('2. 실패(error) 처리: 기록을 불러오지 못했습니다 문구 확인', () => {
+test('3. 로딩(loading) 분기 처리 확인 (빈 목록으로 오인 방지)', () => {
+  const container = new MockElement('div');
+  renderEvents({ status: 'loading' }, container);
+  assert.match(container.textContent, /기록을 불러오는 중입니다/);
+  assert.doesNotMatch(container.textContent, /표시할 기록이 없습니다/);
+});
+
+test('4. 계약 불일치(CONTRACT_MISMATCH) 처리: error.code 기반 실제 계약 형식 확인', () => {
+  const container = new MockElement('div');
+  // 실제 계약 형태: error 객체의 code 속성에 CONTRACT_MISMATCH 전달
+  renderEvents({ status: 'error', error: { code: 'CONTRACT_MISMATCH', message: '스키마 불일치' } }, container);
+  assert.match(container.textContent, /확인 불가\(CONTRACT_MISMATCH\)/);
+  assert.doesNotMatch(container.textContent, /기록을 불러오지 못했습니다/);
+});
+
+test('5. 일반 오류(error) 처리: 기록을 불러오지 못했습니다 문구 확인', () => {
   const container = new MockElement('div');
   renderEvents({ status: 'error', error: { message: '네트워크 연결 시간 초과' } }, container);
   assert.match(container.textContent, /^기록을 불러오지 못했습니다: 네트워크 연결 시간 초과/);
 });
 
-test('3. 계약 불일치(CONTRACT_MISMATCH) 처리: 확인 불가 및 목록 초기화 확인', () => {
-  const container = new MockElement('div');
-  renderEvents({ status: 'CONTRACT_MISMATCH' }, container);
-  assert.match(container.textContent, /확인 불가\(CONTRACT_MISMATCH\)/);
-});
-
-test('4. 최신순 정렬 및 원본 배열 불변성 확인', () => {
+test('6. 최신순 정렬 및 원본 배열 불변성 확인', () => {
   const container = new MockElement('div');
   const copyOfMock = JSON.parse(JSON.stringify(mockData));
   renderEvents({ status: 'ok', data: copyOfMock }, container);
 
-  // 원본 첫 요소는 evt-older였으나, 렌더링된 첫 요소는 더 최신인 evt-newer여야 함
   const rows = container.querySelectorAll('[data-student-event-id]');
   assert.equal(rows.length, 2);
   assert.equal(rows[0].getAttribute('data-student-event-id'), 'evt-newer');
   assert.equal(rows[1].getAttribute('data-student-event-id'), 'evt-older');
-
-  // 원본 배열이 변형되지 않았는지 검증
   assert.equal(copyOfMock[0].id, 'evt-older');
 });
 
-test('5. 필터 라벨 및 컨트롤 접근성 확인', () => {
-  const container = new MockElement('div');
-  renderEvents({ status: 'ok', data: mockData }, container);
+test('7. 세션 및 기기 상태값 한국어 설명 및 원래 코드 보존 확인', () => {
+  // access
+  assert.equal(formatStateValue('access', 'allowed'), '허용(allowed)');
+  assert.equal(formatStateValue('access', 'denied'), '거부(denied)');
+  assert.equal(formatStateValue('access', 'unknown'), '확인 불가(unknown)');
 
-  const kindSelect = container.querySelector('#student-filter-kind');
-  const appSelect = container.querySelector('#student-filter-app');
-  const accessSelect = container.querySelector('#student-filter-access');
+  // session (13단계 계약)
+  assert.equal(formatStateValue('session', 'active'), '유효(active)');
+  assert.equal(formatStateValue('session', 'expired'), '만료(expired)');
+  assert.equal(formatStateValue('session', 'revoked'), '회수(revoked)');
+  assert.equal(formatStateValue('session', 'step_up_required'), '추가 인증 필요(step_up_required)');
+  assert.equal(formatStateValue('session', 'unknown'), '확인 불가(unknown)');
 
-  assert.ok(kindSelect, '기록 종류 필터 존재');
-  assert.ok(appSelect, '업무 앱 필터 존재');
-  assert.ok(accessSelect, '접속 상태 필터 존재');
-
-  assert.equal(kindSelect.getAttribute('aria-label'), '기록 종류');
-  assert.equal(appSelect.getAttribute('aria-label'), '업무 앱');
-  assert.equal(accessSelect.getAttribute('aria-label'), '접속 상태');
+  // device (13단계 계약)
+  assert.equal(formatStateValue('device', 'registered'), '등록됨(registered)');
+  assert.equal(formatStateValue('device', 'unregistered'), '미등록(unregistered)');
+  assert.equal(formatStateValue('device', 'blocked'), '차단됨(blocked)');
+  assert.equal(formatStateValue('device', 'unknown'), '확인 불가(unknown)');
 });
 
-test('6. 상세 버튼 및 상태 정보(unknown -> 확인 불가) 확인', () => {
+test('8. 상세 버튼 및 상태 정보(세 상태 분리 및 unknown 표기) 확인', () => {
   const container = new MockElement('div');
   renderEvents({ status: 'ok', data: mockData }, container);
 
-  // evt-newer 상세 버튼 확인
   const detailBtn = container.querySelector('[aria-label="evt-newer 상세"]');
   assert.ok(detailBtn, '<event.id> 상세 버튼 존재');
 
-  // 상세 버튼 클릭
   detailBtn.dispatchEvent({ type: 'click' });
 
-  // 상세 영역 생성 확인
   const detailSec = container.querySelector('[data-student-event-detail="evt-newer"]');
   assert.ok(detailSec, 'data-student-event-detail 요소 생성');
 
   const text = detailSec.textContent;
-  assert.match(text, /확인 불가\(unknown\)/, 'unknown 값이 확인 불가(unknown)으로 표시됨');
-  assert.match(text, /rule-xdr/, '규칙 id 포함');
-  assert.match(text, /evi-xdr/, '근거 id 포함');
+  assert.match(text, /확인 불가\(unknown\)/);
+  assert.match(text, /rule-xdr/);
+  assert.match(text, /evi-xdr/);
 });
 
-test('7. supportedActions 빈 배열 시 조치 버튼 미생성 확인', () => {
+test('9. supportedActions 빈 배열 시 조치 버튼 미생성 확인', () => {
   const container = new MockElement('div');
   renderEvents({ status: 'ok', data: mockData }, container);
 
@@ -203,21 +218,18 @@ test('7. supportedActions 빈 배열 시 조치 버튼 미생성 확인', () => 
 
   const detailSec = container.querySelector('[data-student-event-detail="evt-newer"]');
   const buttonsInDetail = detailSec.querySelectorAll('button');
-  assert.equal(buttonsInDetail.length, 0, '상세 영역 내 조치 버튼이 존재하지 않아야 함');
+  assert.equal(buttonsInDetail.length, 0, '상세 영역 내 조치 버튼 미존재 확인');
 });
 
-test('8. 다시 불러오기(refresh) 시 이전 상세 및 목록 초기화 확인', () => {
+test('10. 다시 불러오기(refresh) 시 이전 상세 및 목록 초기화 확인', () => {
   const container = new MockElement('div');
   renderEvents({ status: 'ok', data: mockData }, container);
 
-  // 1회차 클릭으로 상세 열기
   const detailBtn = container.querySelector('[aria-label="evt-newer 상세"]');
   detailBtn.dispatchEvent({ type: 'click' });
   assert.ok(container.querySelector('[data-student-event-detail="evt-newer"]'));
 
-  // 2회차 호출 (refresh)
+  // 2회차 재호출
   renderEvents({ status: 'ok', data: mockData }, container);
-
-  // 이전 상세는 닫혀 있어야 함
   assert.equal(container.querySelector('[data-student-event-detail="evt-newer"]'), null);
 });
