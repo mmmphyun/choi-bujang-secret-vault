@@ -88,7 +88,8 @@ export function renderEvents({ status, mode, data, error }, targetContainer) {
   if (status === 'CONTRACT_MISMATCH' || error?.code === 'CONTRACT_MISMATCH') {
     const mismatchEl = document.createElement('div');
     mismatchEl.className = 'events-contract-mismatch';
-    mismatchEl.textContent = '확인 불가(CONTRACT_MISMATCH): 계약 불일치 상태입니다.';
+    const errorMsg = error && typeof error === 'object' && error.message ? `: ${error.message}` : (typeof error === 'string' ? `: ${error}` : '');
+    mismatchEl.textContent = `확인 불가(CONTRACT_MISMATCH): 계약 불일치 상태입니다.${errorMsg}`.trim();
     if (container) container.appendChild(mismatchEl);
     return mismatchEl;
   }

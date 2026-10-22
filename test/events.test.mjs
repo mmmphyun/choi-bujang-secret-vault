@@ -145,11 +145,15 @@ test('3. 로딩(loading) 분기 처리 확인 (빈 목록으로 오인 방지)',
   assert.doesNotMatch(container.textContent, /표시할 기록이 없습니다/);
 });
 
-test('4. 계약 불일치(CONTRACT_MISMATCH) 처리: error.code 기반 실제 계약 형식 확인', () => {
+test('4. 계약 불일치(CONTRACT_MISMATCH) 처리: error.code 및 error.message 노출 확인', () => {
   const container = new MockElement('div');
-  // 실제 계약 형태: error 객체의 code 속성에 CONTRACT_MISMATCH 전달
-  renderEvents({ status: 'error', error: { code: 'CONTRACT_MISMATCH', message: '스키마 불일치' } }, container);
+  renderEvents({
+    status: 'error',
+    error: { code: 'CONTRACT_MISMATCH', message: '스키마 버전 불일치 감지' }
+  }, container);
+
   assert.match(container.textContent, /확인 불가\(CONTRACT_MISMATCH\)/);
+  assert.match(container.textContent, /스키마 버전 불일치 감지/, 'error.message가 textContent에 반드시 포함되어야 함');
   assert.doesNotMatch(container.textContent, /기록을 불러오지 못했습니다/);
 });
 
