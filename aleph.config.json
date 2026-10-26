@@ -19,7 +19,9 @@
     "GET /api/notices",
     "GET /api/notices/:id",
     "GET /api/ops/summary",
-    "GET /api/events"
+    "GET /api/events",
+    "GET /api/ai/connection",
+    "POST /api/ai/explain"
   ],
   "originalApiUrl": "https://lokymnrpfrnfirmhjvht.supabase.co/rest/v1/notes",
   "restoreRoute": "POST /api/notes/restore"

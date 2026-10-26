@@ -121,6 +121,37 @@
       <div id="events-container" data-student-events></div>
     </section>
 
+    <!-- 17단계 앱 내부 AI 연결 및 보안 사건 설명 연동 -->
+    <section class="auth-card" id="student-ai-section">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h2 style="margin: 0;">수업용 AI 연결 및 보안 사건 설명 (17단계)</h2>
+      </div>
+      <p style="font-size: 14px; color: #cbd5e1; margin-bottom: 16px;">
+        앱 서버를 통해서만 수업용 AI에 연결하며, 연결 점검 결과와 사건 설명 실행을 엄격히 구분합니다.
+      </p>
+
+      <!-- 계정 연결 및 승인 영역 -->
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px;">
+        <button type="button" id="btn-start-ai-connect" class="btn-secondary">AI 연결 시작</button>
+        <span id="ai-connect-number" style="font-size: 13px; color: #38bdf8; font-weight: bold;"></span>
+        <a href="#approval" id="btn-open-ai-approval" class="btn-secondary" style="text-decoration: none; padding: 8px 12px; display: inline-block;">승인 페이지 열기</a>
+        <button type="button" id="btn-confirm-ai-connect" class="btn-secondary">승인했으며 연결 확인</button>
+      </div>
+
+      <!-- 연결 점검 및 취소 컨트롤 -->
+      <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 16px;">
+        <button type="button" id="btn-check-ai-connection" class="btn-primary">현재 API 연결 점검</button>
+        <button type="button" id="btn-cancel-ai-check" class="btn-secondary">점검 취소</button>
+        <button type="button" id="btn-test-ai-explain" class="btn-secondary" style="margin-left: auto;">사건 설명 요청 (/api/ai/explain)</button>
+      </div>
+
+      <!-- AI 연결 상태 렌더링 컨테이너 -->
+      <div id="ai-connection-container" data-student-ai-connection style="margin-bottom: 16px;"></div>
+
+      <!-- AI 사건 설명 렌더링 컨테이너 -->
+      <div id="explanation-container" data-student-explanation></div>
+    </section>
+
     <!-- 1~11단계 방어 실측 점검 및 41종 시험 점검표 -->
     <section class="ops-table-card">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">

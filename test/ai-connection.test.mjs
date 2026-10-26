@@ -261,6 +261,45 @@ test('8. renderExplanation: 실패 시 data-student-explanation-event 속성 미
   }, container);
 
   assert.equal(root.getAttribute('data-student-explanation-event'), null, '실패 시 data 속성이 부여되지 않아야 함');
-  assert.ok(root.textContent.includes('AI_TIMEOUT'));
+  assert.ok(root.textContent.includes('TIMEOUT'));
   assert.ok(root.textContent.includes('기록은 그대로 유지됩니다.'));
 });
+
+test('9. 민감 정보(열쇠, 토큰) 차단 검증 (secret_absence, ai_auth_error)', () => {
+  const container = new MockElement('div');
+  const sensitiveError = {
+    code: 'UNAUTHORIZED_SECRET_LEAK_TEST',
+    message: 'Bearer token eyJhbGciOi... and secret key sk-test-12345 failed.'
+  };
+
+  const root = renderAiConnection({
+    status: 'error',
+    error: sensitiveError
+  }, container);
+
+  assert.ok(!root.textContent.includes('sk-test-12345'), '원문 비밀키가 화면에 노출되지 않아야 함');
+  assert.ok(!root.textContent.includes('eyJhbGciOi'), '원문 토큰이 화면에 노출되지 않아야 함');
+  assert.ok(root.textContent.includes('UNAUTHORIZED'));
+  assert.ok(root.textContent.includes('계정 연결 다시 확인, 담당자 확인'));
+});
+
+test('10. public/app.js 및 public/index.html 경로 연결 검증 (ai_transport_checked, ai_model_called, ai_timeout_cancel)', async () => {
+  const fs = await import('node:fs');
+  const appJs = fs.readFileSync('public/app.js', 'utf-8');
+  const indexHtml = fs.readFileSync('public/index.html', 'utf-8');
+
+  // /api/ai/connection 호출 경로 확인
+  assert.ok(appJs.includes('/api/ai/connection'), 'app.js에 /api/ai/connection 점검 경로가 존재해야 함');
+  // /api/ai/explain 호출 경로 확인
+  assert.ok(appJs.includes('/api/ai/explain'), 'app.js에 /api/ai/explain 사건 설명 경로가 존재해야 함');
+  // 취소 및 응답 무효화 (AbortController / currentAiCheckRequestId) 확인
+  assert.ok(appJs.includes('currentAiCheckRequestId'), '요청 시퀀스 검증으로 무효화 처리가 존재해야 함');
+  assert.ok(appJs.includes('abort()'), '요청 취소 로직이 존재해야 함');
+
+  // index.html 내 필수 UI 요소 확인
+  assert.ok(indexHtml.includes('id="btn-check-ai-connection"'), '연결 점검 버튼 존재');
+  assert.ok(indexHtml.includes('id="btn-cancel-ai-check"'), '점검 취소 버튼 존재');
+  assert.ok(indexHtml.includes('data-student-ai-connection'), 'AI 연결 상태 컨테이너 존재');
+  assert.ok(indexHtml.includes('data-student-explanation'), '사건 설명 컨테이너 존재');
+});
+

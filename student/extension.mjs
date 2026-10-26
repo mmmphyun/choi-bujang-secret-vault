@@ -744,34 +744,30 @@ export function renderStatus({ devices, sessions, notifications, diagnostics, mo
 
 /**
  * 17단계: AI 오류 원인 분석 및 안전한 한국어 가이드 반환 헬퍼
+ * 원문 error.code와 error.message를 그대로 노출하지 않고 안전성이 검증된 표준 코드와 정제 메시지만 반환합니다.
  * @param {Object|string} error
  * @returns {{ code: string, message: string, category: string, guide: string }}
  */
 export function classifyAiError(error) {
   const rawCode = typeof error === 'object' && error?.code ? String(error.code) : '';
   const rawMsg = typeof error === 'object' && error?.message ? String(error.message) : (typeof error === 'string' ? error : '');
-
-  // 민감 정보(키, 토큰 등) 필터링
-  const safeCode = rawCode || 'UNKNOWN_ERROR';
-  const safeMsg = rawMsg || 'AI 연결 점검 중 오류가 발생했습니다.';
-
-  const combined = `${safeCode} ${safeMsg}`.toUpperCase();
+  const combined = `${rawCode} ${rawMsg}`.toUpperCase();
 
   // 1. 취소 (CANCELLED, ABORTED)
   if (/CANCEL|ABORT/i.test(combined)) {
     return {
-      code: safeCode,
-      message: safeMsg,
+      code: 'CANCELLED',
+      message: '요청이 취소되었습니다.',
       category: '취소',
       guide: '취소됨. 이전 결과는 현재 결과가 아님'
     };
   }
 
   // 2. 권한 준비 중 · 확인 불가 (AUTH_PENDING, NOT_READY, PENDING_PERMISSION, UNKNOWN 등)
-  if (/PENDING|NOT_READY|PREPARING|UNKNOWN_PERMISSION/i.test(combined)) {
+  if (/PENDING|NOT_READY|PREPARING|UNKNOWN/i.test(combined)) {
     return {
-      code: safeCode,
-      message: safeMsg,
+      code: 'AUTH_PENDING',
+      message: '운영 측 계정 연결 및 앱 권한 확인이 필요합니다.',
       category: '권한 준비 중 · 확인 불가',
       guide: '운영 측 계정 연결 및 앱 권한 확인 요청 (학생 잘못이 아님)'
     };
@@ -780,8 +776,8 @@ export function classifyAiError(error) {
   // 3. 인증 실패 · 접근 제한 (UNAUTHENTICATED, UNAUTHORIZED, FORBIDDEN, ACCESS_DENIED, AUTH_FAILED 등)
   if (/UNAUTH|FORBIDDEN|DENIED|ACCESS_RESTRICTED|AUTH_FAIL/i.test(combined)) {
     return {
-      code: safeCode,
-      message: safeMsg,
+      code: 'UNAUTHORIZED',
+      message: '인증에 실패했거나 접근이 제한되었습니다.',
       category: '인증 실패 · 접근 제한',
       guide: '계정 연결 다시 확인, 담당자 확인'
     };
@@ -790,8 +786,8 @@ export function classifyAiError(error) {
   // 4. 반 사용량 · 이용 한도 (QUOTA, LIMIT_EXCEEDED, USAGE_LIMIT, RATE_LIMIT)
   if (/QUOTA|LIMIT|RATE_LIMIT|EXCEEDED/i.test(combined)) {
     return {
-      code: safeCode,
-      message: safeMsg,
+      code: 'QUOTA_EXCEEDED',
+      message: '반 이용 한도 또는 요청 한도를 초과했습니다.',
       category: '반 사용량 · 이용 한도',
       guide: '담당자 확인'
     };
@@ -800,8 +796,8 @@ export function classifyAiError(error) {
   // 5. 이용 시간 아님 (OUT_OF_SERVICE_HOURS, INVALID_TIME, HOURS_RESTRICTED)
   if (/HOUR|SCHEDULE|TIME_RESTRICT|OUT_OF_SERVICE/i.test(combined)) {
     return {
-      code: safeCode,
-      message: safeMsg,
+      code: 'OUT_OF_SERVICE_HOURS',
+      message: '현재는 서비스 이용 시간이 아닙니다.',
       category: '이용 시간 아님',
       guide: '이용 시간 확인'
     };
@@ -810,8 +806,8 @@ export function classifyAiError(error) {
   // 6. 요청 제한 · 시간 초과 · 네트워크 (TIMEOUT, DEADLINE_EXCEEDED, NETWORK_ERROR 등)
   if (/TIMEOUT|DEADLINE|NETWORK/i.test(combined)) {
     return {
-      code: safeCode,
-      message: safeMsg,
+      code: 'TIMEOUT',
+      message: '요청 시간이 초과되었거나 네트워크 연결에 실패했습니다.',
       category: '요청 제한 · 시간 초과 · 네트워크',
       guide: '잠시 뒤 직접 다시 점검'
     };
@@ -820,17 +816,17 @@ export function classifyAiError(error) {
   // 7. 쓸 수 있는 모델 없음 (NO_MODELS_AVAILABLE, MODEL_NOT_FOUND, NO_MODEL)
   if (/NO_MODEL|MODEL_NOT_FOUND|MODEL_UNAVAILABLE/i.test(combined)) {
     return {
-      code: safeCode,
-      message: safeMsg,
+      code: 'NO_MODELS_AVAILABLE',
+      message: '사용 가능한 AI 모델이 없습니다.',
       category: '쓸 수 있는 모델 없음',
       guide: '담당자에게 모델 허용 설정 확인 요청'
     };
   }
 
-  // 기본 분류
+  // 기본 안전 분류
   return {
-    code: safeCode,
-    message: safeMsg,
+    code: 'UNKNOWN_ERROR',
+    message: 'AI 연결을 점검할 수 없습니다.',
     category: '기타 오류',
     guide: '담당자 확인 필요'
   };
@@ -1045,9 +1041,10 @@ export function renderExplanation({ event, explanation, checkedAt } = {}, target
       root.appendChild(pTime);
     }
   } else {
-    // 실패 시: data-student-explanation-event 속성을 절대 부여하지 않음
-    const errCode = explanation?.error?.code || 'EXPLANATION_FAILED';
-    const errMsg = explanation?.error?.message || '사건 설명을 불러오지 못했습니다.';
+    // 실패 시: data-student-explanation-event 속성을 절대 부여하지 않음 (안전한 정제 코드/메시지만 노출)
+    const classified = classifyAiError(explanation?.error || { code: 'EXPLANATION_FAILED', message: '사건 설명을 불러오지 못했습니다.' });
+    const errCode = classified.code || 'EXPLANATION_FAILED';
+    const errMsg = classified.message || '사건 설명을 불러오지 못했습니다.';
 
     const pCode = document.createElement('p');
     pCode.className = 'explanation-error-code';
