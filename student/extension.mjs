@@ -1018,11 +1018,126 @@ export function renderExplanation({ event, explanation, checkedAt } = {}, target
   title.textContent = '보안 사건 설명';
   root.appendChild(title);
 
+  const status = explanation?.status;
+  const isError = status === 'error' || Boolean(explanation?.error);
+
+  // 1. 오류 상태 처리: event가 null이어도 안전한 오류 코드·메시지 표시
+  if (isError) {
+    const rawError = explanation?.error || { code: 'EXPLANATION_FAILED', message: '사건 설명을 불러오지 못했습니다.' };
+    const classified = classifyAiError(rawError);
+    const errCode = classified.code || 'EXPLANATION_FAILED';
+    const errMsg = classified.message || '사건 설명을 불러오지 못했습니다.';
+
+    const pFail = document.createElement('p');
+    pFail.className = 'explanation-fail-notice';
+    pFail.textContent = 'AI 설명 실패: 사건 설명을 불러올 수 없습니다.';
+    root.appendChild(pFail);
+
+    const pCode = document.createElement('p');
+    pCode.className = 'explanation-error-code';
+    pCode.textContent = `오류 코드: ${errCode}`;
+    root.appendChild(pCode);
+
+    const pMsg = document.createElement('p');
+    pMsg.className = 'explanation-error-message';
+    pMsg.textContent = `오류 내용: ${errMsg}`;
+    root.appendChild(pMsg);
+
+    const pKeep = document.createElement('p');
+    pKeep.className = 'explanation-keep-record';
+    pKeep.textContent = '기록은 그대로 유지됩니다.';
+    root.appendChild(pKeep);
+
+    if (container) container.appendChild(root);
+    return root;
+  }
+
+  // 2. 오류 없이 event가 null인 경우: 보안 기록 선택 안내
+  if (!event) {
+    const pSelect = document.createElement('p');
+    pSelect.className = 'explanation-select-event';
+    pSelect.textContent = '보안 기록에서 기록을 먼저 고르세요.';
+    root.appendChild(pSelect);
+
+    if (container) container.appendChild(root);
+    return root;
+  }
+
+  // 3. 요청 중 (loading) 상태 처리
+  if (status === 'loading' || explanation?.mode === 'loading') {
+    const pLoading = document.createElement('p');
+    pLoading.className = 'explanation-loading';
+    pLoading.textContent = '설명 요청 중...';
+    root.appendChild(pLoading);
+
+    if (container) container.appendChild(root);
+    return root;
+  }
+
+  // 4. 설명 데이터 검증 및 실행 완료 위반(executed: true) 차단
+  if (explanation?.data?.executed === true) {
+    const pFail = document.createElement('p');
+    pFail.className = 'explanation-fail-notice';
+    pFail.textContent = 'AI 설명 실패: AI가 이미 실행했다고 답한 설명은 쓸 수 없습니다.';
+    root.appendChild(pFail);
+
+    const pCode = document.createElement('p');
+    pCode.className = 'explanation-error-code';
+    pCode.textContent = '오류 코드: EXECUTED_PROPOSAL_REJECTED';
+    root.appendChild(pCode);
+
+    const pKeep = document.createElement('p');
+    pKeep.className = 'explanation-keep-record';
+    pKeep.textContent = '기록은 그대로 유지됩니다.';
+    root.appendChild(pKeep);
+
+    if (container) container.appendChild(root);
+    return root;
+  }
+
+  // 5. 근거 일치성 검증 (evidence binding check)
+  const eventEvidences = Array.isArray(event?.evidence) ? event.evidence : [];
+  const explanationEvidenceIds = Array.isArray(explanation?.data?.evidenceIds) ? explanation.data.evidenceIds : null;
+
+  if (explanationEvidenceIds !== null && explanationEvidenceIds.length > 0) {
+    const missingEvidenceIds = explanationEvidenceIds.filter(id => !eventEvidences.some(e => e.id === id));
+    if (missingEvidenceIds.length > 0) {
+      const pFail = document.createElement('p');
+      pFail.className = 'explanation-fail-notice';
+      pFail.textContent = 'AI 설명 실패: 근거가 맞지 않아 설명을 쓸 수 없습니다.';
+      root.appendChild(pFail);
+
+      const pCode = document.createElement('p');
+      pCode.className = 'explanation-error-code';
+      pCode.textContent = '오류 코드: INVALID_EVIDENCE';
+      root.appendChild(pCode);
+
+      const pMsg = document.createElement('p');
+      pMsg.className = 'explanation-error-message';
+      pMsg.textContent = `불일치 근거 ID: ${missingEvidenceIds.join(', ')}`;
+      root.appendChild(pMsg);
+
+      const pKeep = document.createElement('p');
+      pKeep.className = 'explanation-keep-record';
+      pKeep.textContent = '기록은 그대로 유지됩니다.';
+      root.appendChild(pKeep);
+
+      if (container) container.appendChild(root);
+      return root;
+    }
+  }
+
   const eventId = event?.id || '(미제공)';
 
   if (explanation?.status === 'ok') {
-    // 성공 시에만 data-student-explanation-event 속성 부여
+    // 6. 성공한 설명에만 data-student-explanation-event 지정
     root.setAttribute('data-student-explanation-event', event?.id || '');
+
+    // 1) 사건 ID 및 참고용 AI 요약
+    const pAiTitle = document.createElement('h5');
+    pAiTitle.className = 'explanation-ai-title';
+    pAiTitle.textContent = 'AI 설명(참고용)';
+    root.appendChild(pAiTitle);
 
     const pEvent = document.createElement('p');
     pEvent.className = 'explanation-event-id';
@@ -1041,26 +1156,129 @@ export function renderExplanation({ event, explanation, checkedAt } = {}, target
       pTime.textContent = `설명 생성 시각: ${checkedAt}`;
       root.appendChild(pTime);
     }
-  } else {
-    // 실패 시: data-student-explanation-event 속성을 절대 부여하지 않음 (안전한 정제 코드/메시지만 노출)
-    const classified = classifyAiError(explanation?.error || { code: 'EXPLANATION_FAILED', message: '사건 설명을 불러오지 못했습니다.' });
-    const errCode = classified.code || 'EXPLANATION_FAILED';
-    const errMsg = classified.message || '사건 설명을 불러오지 못했습니다.';
 
-    const pCode = document.createElement('p');
-    pCode.className = 'explanation-error-code';
-    pCode.textContent = `오류 코드: ${errCode}`;
-    root.appendChild(pCode);
+    // 2) 인용된 근거 목록 ("근거 ID — 근거 글")
+    const evidenceSection = document.createElement('div');
+    evidenceSection.className = 'explanation-evidence-section';
+    const pEviTitle = document.createElement('p');
+    pEviTitle.className = 'explanation-evidence-title';
+    pEviTitle.textContent = '인용된 근거:';
+    evidenceSection.appendChild(pEviTitle);
 
-    const pMsg = document.createElement('p');
-    pMsg.className = 'explanation-error-message';
-    pMsg.textContent = `오류 내용: ${errMsg}`;
-    root.appendChild(pMsg);
+    const matchedEvidences = (explanationEvidenceIds !== null && explanationEvidenceIds.length > 0)
+      ? eventEvidences.filter(e => explanationEvidenceIds.includes(e.id))
+      : eventEvidences;
 
-    const pKeep = document.createElement('p');
-    pKeep.className = 'explanation-keep-record';
-    pKeep.textContent = '기록은 그대로 유지됩니다.';
-    root.appendChild(pKeep);
+    if (matchedEvidences.length > 0) {
+      const ulEvidence = document.createElement('ul');
+      ulEvidence.className = 'explanation-evidence-list';
+      for (const evi of matchedEvidences) {
+        const li = document.createElement('li');
+        li.className = 'explanation-evidence-item';
+        li.textContent = `${evi.id} — ${evi.text}`;
+        ulEvidence.appendChild(li);
+      }
+      evidenceSection.appendChild(ulEvidence);
+    } else {
+      const pNoEvi = document.createElement('p');
+      pNoEvi.className = 'explanation-evidence-none';
+      pNoEvi.textContent = '인용된 근거가 없습니다.';
+      evidenceSection.appendChild(pNoEvi);
+    }
+    root.appendChild(evidenceSection);
+
+    // 3) 적용된 규칙 목록 ("규칙 ID — 규칙 글")
+    const rulesSection = document.createElement('div');
+    rulesSection.className = 'explanation-rules-section';
+    const pRulesTitle = document.createElement('p');
+    pRulesTitle.className = 'explanation-rules-title';
+    pRulesTitle.textContent = '적용된 규칙:';
+    rulesSection.appendChild(pRulesTitle);
+
+    const eventRules = Array.isArray(event?.rules) ? event.rules : [];
+    if (eventRules.length > 0) {
+      const ulRules = document.createElement('ul');
+      ulRules.className = 'explanation-rules-list';
+      for (const rule of eventRules) {
+        const li = document.createElement('li');
+        li.className = 'explanation-rule-item';
+        li.textContent = `${rule.id} — ${rule.text}`;
+        ulRules.appendChild(li);
+      }
+      rulesSection.appendChild(ulRules);
+    } else {
+      const pNoRules = document.createElement('p');
+      pNoRules.className = 'explanation-rules-none';
+      pNoRules.textContent = '적용된 규칙이 없습니다.';
+      rulesSection.appendChild(pNoRules);
+    }
+    root.appendChild(rulesSection);
+
+    // 4) 상태 정보: access·session·device 중 unknown인 값을 각각 확인 불가로 표시
+    const stateSection = document.createElement('div');
+    stateSection.className = 'explanation-state-section';
+    const pStateTitle = document.createElement('p');
+    pStateTitle.className = 'explanation-state-title';
+    pStateTitle.textContent = '확인 불가 상태:';
+    stateSection.appendChild(pStateTitle);
+
+    const rawState = event?.state || {};
+    const unknownItems = [];
+    if (rawState.access === 'unknown') unknownItems.push('접속: 확인 불가(unknown)');
+    if (rawState.session === 'unknown') unknownItems.push('세션: 확인 불가(unknown)');
+    if (rawState.device === 'unknown') unknownItems.push('기기: 확인 불가(unknown)');
+
+    if (unknownItems.length > 0) {
+      const ulUnknown = document.createElement('ul');
+      ulUnknown.className = 'explanation-unknown-list';
+      for (const item of unknownItems) {
+        const li = document.createElement('li');
+        li.className = 'explanation-unknown-item';
+        li.textContent = item;
+        ulUnknown.appendChild(li);
+      }
+      stateSection.appendChild(ulUnknown);
+    } else {
+      const pNoUnknown = document.createElement('p');
+      pNoUnknown.className = 'explanation-unknown-none';
+      pNoUnknown.textContent = '없음';
+      stateSection.appendChild(pNoUnknown);
+    }
+    root.appendChild(stateSection);
+
+    // 5) 조치 제안 (proposals)
+    const proposalSection = document.createElement('div');
+    proposalSection.className = 'explanation-proposal-section';
+    const pProposalTitle = document.createElement('p');
+    pProposalTitle.className = 'explanation-proposal-title';
+    pProposalTitle.textContent = '조치 제안:';
+    proposalSection.appendChild(pProposalTitle);
+
+    const proposals = Array.isArray(explanation?.data?.proposals) ? explanation.data.proposals : [];
+    if (proposals.length === 0) {
+      const supportedActions = Array.isArray(event?.supportedActions) ? event.supportedActions : [];
+      const pNoProposal = document.createElement('p');
+      pNoProposal.className = 'explanation-proposal-none';
+      if (supportedActions.length === 0) {
+        pNoProposal.textContent = '연동 시스템이 지원하는 조치가 없어 제안이 없습니다(정상)';
+      } else {
+        pNoProposal.textContent = 'AI가 제안한 조치가 없습니다.';
+      }
+      proposalSection.appendChild(pNoProposal);
+    } else {
+      const ulProposals = document.createElement('ul');
+      ulProposals.className = 'explanation-proposal-list';
+      for (const prop of proposals) {
+        const li = document.createElement('li');
+        li.className = 'explanation-proposal-item';
+        const actionText = prop.action || '미지정 조치';
+        const reasonText = prop.reason || '사유 미기재';
+        li.textContent = `제안 조치: ${actionText} (이유: ${reasonText}) - 사람 확인이 필요하며 실행되지 않았습니다`;
+        ulProposals.appendChild(li);
+      }
+      proposalSection.appendChild(ulProposals);
+    }
+    root.appendChild(proposalSection);
   }
 
   if (container) {
