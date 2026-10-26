@@ -334,6 +334,12 @@ test('11. api/ai/connection.js: 게이트웨이 미확인 상태에서 고정 ve
   assert.notEqual(statusCode, 200, '확인되지 않은 상태를 200 성공으로 반환하지 않아야 함');
   assert.equal(statusCode, 503);
   assert.equal(responseData.code, 'AUTH_PENDING');
+
+  // api/ai/connection.js 소스에 data.transportChecked === true 조건이 존재하는지 검증
+  const fs = await import('node:fs');
+  const connectionSrc = fs.readFileSync('api/ai/connection.js', 'utf-8');
+  assert.ok(connectionSrc.includes('data.transportChecked === true'), 'transportChecked가 실제 true인지 엄격히 검증해야 함');
+  assert.ok(!connectionSrc.includes('Boolean(data.transportChecked)'), '단순 Boolean 변환으로 false를 허용하지 않아야 함');
 });
 
 test('12. public/app.js: 재연결(resetAiConnection) 시 진행 중 점검 중단 및 idle 초기화 검증 (ai_generation_reset)', async () => {

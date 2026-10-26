@@ -42,20 +42,21 @@ export default async function handler(req, res) {
 
     const data = await response.json().catch(() => null);
 
-    // 게이트웨이 응답 필드 엄격 검증: 권한 종류(test/verified)나 모델 수가 누락되면 성공으로 임의 보정하지 않음
+    // 게이트웨이 응답 필드 엄격 검증: transportChecked가 true가 아니거나 권한/모델 수가 유효하지 않으면 200 성공으로 반환하지 않음
+    const isValidTransport = data && data.transportChecked === true;
     const isValidAuth = data && (data.audienceAuthorization === 'test' || data.audienceAuthorization === 'verified');
     const isValidModelCount = data && typeof data.modelCount === 'number';
 
-    if (!isValidAuth || !isValidModelCount) {
+    if (!isValidTransport || !isValidAuth || !isValidModelCount) {
       return res.status(503).json({
         code: 'AUTH_PENDING',
-        message: '게이트웨이 응답에서 계정 권한(audienceAuthorization) 또는 모델 수(modelCount)가 확인되지 않았습니다.'
+        message: '게이트웨이 응답에서 전송 점검(transportChecked: true), 계정 권한 또는 모델 수가 확인되지 않았습니다.'
       });
     }
 
-    // 실제로 검증된 값만 전달
+    // 실제로 검증된 값만 전달 (transportChecked는 반드시 true)
     return res.status(200).json({
-      transportChecked: Boolean(data.transportChecked),
+      transportChecked: true,
       audienceAuthorization: data.audienceAuthorization,
       modelCount: data.modelCount,
       help: data.help || '수업용 AI 게이트웨이 연결 확인 완료'

@@ -327,7 +327,7 @@
 * **작동하는 기능**:
   * **앱 서버를 통한 수업용 AI 연결 점검 (`/api/ai/connection`)**:
     * 제공 화면(`public/app.js`, `public/index.html`)에서 앱 서버 엔드포인트(`/api/ai/connection`)를 통해 점검을 수행하고 결과를 `renderAiConnection`에 연결합니다.
-    * 임의의 고정 성공(`verified`)을 반환하지 않고, 실제 수업용 AI 게이트웨이에 연결하여 앱 권한 및 모델 응답을 실측하며 미확인 시 권한 준비 중(`AUTH_PENDING`)을 반환합니다.
+    * 임의의 고정 성공(`verified`)을 반환하지 않고, 실제 수업용 AI 게이트웨이에 연결하여 `transportChecked: true`와 앱 권한 및 모델 응답을 엄격히 실측하며 미확인 시 권한 준비 중(`AUTH_PENDING`)을 반환합니다.
     * `AbortController` 및 요청 ID 시퀀스 추적을 통해 점검 취소(`cancelAiConnectionCheck`)와 재연결(`resetAiConnection`) 시 진행 중 점검을 즉시 중단하고 지연 응답 무효화를 보장합니다.
   * **수업용 AI 연결 상태 렌더링 (`renderAiConnection`)**:
     * 상태 분기(`idle`, `loading`, `ok`, `error`)를 지원합니다.
