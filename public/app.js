@@ -142,6 +142,30 @@ export function cancelAiConnectionCheck(container) {
 }
 
 /**
+ * AI 연결 재연결 및 상태 초기화 함수
+ * 재연결 시 진행 중인 점검 요청을 즉시 중단(abort)하고 응답을 무효화하여
+ * 늦게 도착한 점검 결과가 남지 않도록 완전히 초기화합니다.
+ * @param {HTMLElement} [container]
+ */
+export function resetAiConnection(container) {
+  const target = container || document.getElementById('ai-connection-container');
+
+  // 진행 중인 점검 요청 즉시 중단
+  if (currentAiCheckController) {
+    currentAiCheckController.abort();
+    currentAiCheckController = null;
+  }
+
+  // 시퀀스 ID 증가로 지연 응답 무효화
+  currentAiCheckRequestId++;
+
+  if (target) {
+    const renderFn = studentView.renderAiConnection || renderAiConnection;
+    renderFn({ status: 'idle' }, target);
+  }
+}
+
+/**
  * 보안 사건 AI 설명 요청 함수
  * 과제 기준의 /api/ai/explain 경로를 호출하여 사건 설명을 생성하고 renderExplanation으로 전달합니다.
  * @param {string} eventId
@@ -215,14 +239,14 @@ if (typeof document !== 'undefined') {
 
     if (startConnectBtn && connectNumberSpan) {
       startConnectBtn.addEventListener('click', () => {
+        resetAiConnection(aiContainer);
         connectNumberSpan.textContent = '확인 번호: AG-90118';
       });
     }
 
     if (confirmConnectBtn) {
       confirmConnectBtn.addEventListener('click', () => {
-        const renderFn = studentView.renderAiConnection || renderAiConnection;
-        renderFn({ status: 'idle' }, aiContainer);
+        resetAiConnection(aiContainer);
       });
     }
 

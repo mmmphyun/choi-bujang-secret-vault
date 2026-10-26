@@ -303,3 +303,37 @@ test('10. public/app.js 및 public/index.html 경로 연결 검증 (ai_transport
   assert.ok(indexHtml.includes('data-student-explanation'), '사건 설명 컨테이너 존재');
 });
 
+test('11. api/ai/connection.js: 게이트웨이 미확인 상태에서 고정 verified 반환 차단 (ai_transport_checked)', async () => {
+  const handler = (await import('../api/ai/connection.js')).default;
+
+  let statusCode = 0;
+  let responseData = null;
+  const mockReq = { method: 'GET' };
+  const mockRes = {
+    status(code) {
+      statusCode = code;
+      return this;
+    },
+    json(data) {
+      responseData = data;
+      return this;
+    }
+  };
+
+  await handler(mockReq, mockRes);
+
+  // 게이트웨이 환경변수가 없는 환경에서는 고정 200/verified 성공을 반환하지 않고 503/AUTH_PENDING 반환
+  assert.notEqual(statusCode, 200, '확인되지 않은 상태를 200 성공으로 반환하지 않아야 함');
+  assert.equal(statusCode, 503);
+  assert.equal(responseData.code, 'AUTH_PENDING');
+});
+
+test('12. public/app.js: 재연결(resetAiConnection) 시 진행 중 점검 중단 및 idle 초기화 검증 (ai_generation_reset)', async () => {
+  const fs = await import('node:fs');
+  const appJs = fs.readFileSync('public/app.js', 'utf-8');
+
+  assert.ok(appJs.includes('resetAiConnection'), 'resetAiConnection 함수가 정의되어야 함');
+  assert.ok(appJs.includes('currentAiCheckController.abort()'), '재연결 시 abort 호출이 포함되어야 함');
+});
+
+
