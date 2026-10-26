@@ -783,33 +783,34 @@ export function classifyAiError(error) {
     };
   }
 
-  // 4. 반 사용량 · 이용 한도 (QUOTA, LIMIT_EXCEEDED, USAGE_LIMIT, RATE_LIMIT)
-  if (/QUOTA|LIMIT|RATE_LIMIT|EXCEEDED/i.test(combined)) {
+  // 4. 요청 제한 · 시간 초과 · 네트워크 (RATE_LIMIT, TOO_MANY_REQUESTS, TIMEOUT, DEADLINE_EXCEEDED, NETWORK_ERROR 등)
+  if (/RATE_LIMIT|TOO_MANY|429|THROTTLE|TIMEOUT|DEADLINE|NETWORK/i.test(combined)) {
+    const isRateLimit = /RATE|TOO_MANY|429|THROTTLE/i.test(combined);
+    return {
+      code: isRateLimit ? 'RATE_LIMIT' : 'TIMEOUT',
+      message: isRateLimit ? '요청 한도 제한에 도달했습니다.' : '요청 시간이 초과되었거나 네트워크 연결에 실패했습니다.',
+      category: '요청 제한 · 시간 초과 · 네트워크',
+      guide: '잠시 뒤 직접 다시 점검'
+    };
+  }
+
+  // 5. 반 사용량 · 이용 한도 (QUOTA, USAGE_LIMIT, LIMIT_EXCEEDED 등)
+  if (/QUOTA|USAGE_LIMIT|EXCEEDED/i.test(combined)) {
     return {
       code: 'QUOTA_EXCEEDED',
-      message: '반 이용 한도 또는 요청 한도를 초과했습니다.',
+      message: '반 이용 한도를 초과했습니다.',
       category: '반 사용량 · 이용 한도',
       guide: '담당자 확인'
     };
   }
 
-  // 5. 이용 시간 아님 (OUT_OF_SERVICE_HOURS, INVALID_TIME, HOURS_RESTRICTED)
+  // 6. 이용 시간 아님 (OUT_OF_SERVICE_HOURS, INVALID_TIME, HOURS_RESTRICTED)
   if (/HOUR|SCHEDULE|TIME_RESTRICT|OUT_OF_SERVICE/i.test(combined)) {
     return {
       code: 'OUT_OF_SERVICE_HOURS',
       message: '현재는 서비스 이용 시간이 아닙니다.',
       category: '이용 시간 아님',
       guide: '이용 시간 확인'
-    };
-  }
-
-  // 6. 요청 제한 · 시간 초과 · 네트워크 (TIMEOUT, DEADLINE_EXCEEDED, NETWORK_ERROR 등)
-  if (/TIMEOUT|DEADLINE|NETWORK/i.test(combined)) {
-    return {
-      code: 'TIMEOUT',
-      message: '요청 시간이 초과되었거나 네트워크 연결에 실패했습니다.',
-      category: '요청 제한 · 시간 초과 · 네트워크',
-      guide: '잠시 뒤 직접 다시 점검'
     };
   }
 

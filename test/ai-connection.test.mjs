@@ -184,12 +184,20 @@ test('5. renderAiConnection: error 상태 분류 및 안전한 안내 확인 (ai
   }, container);
   assert.ok(r2.textContent.includes('계정 연결 다시 확인, 담당자 확인'));
 
-  // 3) 이용 한도
+  // 3) 이용 한도 (QUOTA) -> 담당자 확인
   const r3 = renderAiConnection({
     status: 'error',
     error: { code: 'QUOTA_EXCEEDED', message: '사용량 한도를 초과했습니다.' }
   }, container);
   assert.ok(r3.textContent.includes('담당자 확인'));
+
+  // 3-1) 요청 제한 (RATE_LIMIT) -> 잠시 뒤 직접 다시 점검
+  const r3_rate = renderAiConnection({
+    status: 'error',
+    error: { code: 'RATE_LIMIT', message: '요청 한도에 도달했습니다.' }
+  }, container);
+  assert.ok(r3_rate.textContent.includes('잠시 뒤 직접 다시 점검'), 'RATE_LIMIT은 잠시 뒤 직접 다시 점검으로 안내되어야 함');
+  assert.ok(!r3_rate.textContent.includes('담당자 확인'), 'RATE_LIMIT이 이용 한도로 오분기되지 않아야 함');
 
   // 4) 시간 초과
   const r4 = renderAiConnection({

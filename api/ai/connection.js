@@ -2,8 +2,8 @@
  * /api/ai/connection
  * 17단계: 앱 서버를 통한 수업용 AI 연결 점검 엔드포인트
  * 
- * 확인되지 않은 상태를 성공으로 내보내지 않고, 실제 수업용 AI 게이트웨이에
- * 연결하여 앱 권한 및 모델 목록 응답을 확인한 뒤 결과를 전달합니다.
+ * 확인되지 않은 상태나 누락된 필드를 성공으로 임의 보정하지 않고,
+ * 실제 수업용 AI 게이트웨이 응답의 권한(test/verified)과 모델 수(number)를 엄격히 검증하여 전달합니다.
  */
 
 export default async function handler(req, res) {
@@ -11,45 +11,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ code: 'METHOD_NOT_ALLOWED', message: '허용되지 않는 메소드입니다.' });
   }
 
-  // 수업용 AI 게이트웨이 주소 결정 (환경변수 또는 심판 게이트웨이 기본 경로)
+  // 수업용 AI 게이트웨이 주소 결정
   const gatewayUrl = process.env.AI_GATEWAY_URL ||
     process.env.ALEPH_AI_GATEWAY ||
     'https://aleph-judge-production.up.railway.app/defense/ai';
 
-  // 운영 측 계정 권한이 준비되지 않은 기본 환경이거나 게이트웨이 주소가 누락된 경우
-  // 확인되지 않은 상태를 성공으로 고정 반환하지 않고 권한 준비 중 안내
-  if (!process.env.AI_GATEWAY_URL && !process.env.ALEPH_AI_GATEWAY && !process.env.AI_GATEWAY_TOKEN) {
-    // 실제 외부 통신을 1회 시도하여 상태를 확인
-    try {
-      const pingRes = await fetch(`${gatewayUrl}/connection`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        },
-        signal: AbortSignal.timeout(3000)
-      }).catch(() => null);
-
-      if (pingRes && pingRes.ok) {
-        const pingData = await pingRes.json().catch(() => ({}));
-        return res.status(200).json({
-          transportChecked: true,
-          audienceAuthorization: pingData.audienceAuthorization || 'verified',
-          modelCount: typeof pingData.modelCount === 'number' ? pingData.modelCount : 2,
-          help: pingData.help || '수업용 AI 게이트웨이 연결 검증 완료'
-        });
-      }
-    } catch {
-      // 통신 실패 시 아래의 권한 준비 중(AUTH_PENDING) 반환으로 이동
-    }
-
-    // 외부 AI 게이트웨이 확인이 완료되지 않은 상태에서는 고정 성공을 반환하지 않음
-    return res.status(503).json({
-      code: 'AUTH_PENDING',
-      message: '수업용 AI 게이트웨이 연결 및 계정 권한 확인 준비 중입니다.'
-    });
-  }
-
-  // 게이트웨이 인증 토큰 및 실제 연결 확인
   try {
     const headers = {
       'Accept': 'application/json'
@@ -62,22 +28,36 @@ export default async function handler(req, res) {
       method: 'GET',
       headers,
       signal: AbortSignal.timeout(4000)
-    });
+    }).catch(() => null);
 
-    if (!response.ok) {
-      const errBody = await response.json().catch(() => ({}));
-      const statusCode = response.status >= 400 && response.status < 600 ? response.status : 503;
+    // 게이트웨이 통신 실패 또는 비정상 응답 시 성공으로 보정하지 않고 오류 반환
+    if (!response || !response.ok) {
+      const errBody = response ? await response.json().catch(() => ({})) : {};
+      const statusCode = (response && (response.status === 401 || response.status === 403)) ? response.status : 503;
       return res.status(statusCode).json({
-        code: errBody.code || (response.status === 401 || response.status === 403 ? 'UNAUTHORIZED' : 'AUTH_PENDING'),
-        message: errBody.message || '수업용 AI 게이트웨이 연결 또는 권한 확인에 실패했습니다.'
+        code: errBody.code || (response && (response.status === 401 || response.status === 403) ? 'UNAUTHORIZED' : 'AUTH_PENDING'),
+        message: errBody.message || '운영 측 수업용 AI 게이트웨이 연결 및 계정 권한 확인 준비 중입니다.'
       });
     }
 
-    const data = await response.json();
+    const data = await response.json().catch(() => null);
+
+    // 게이트웨이 응답 필드 엄격 검증: 권한 종류(test/verified)나 모델 수가 누락되면 성공으로 임의 보정하지 않음
+    const isValidAuth = data && (data.audienceAuthorization === 'test' || data.audienceAuthorization === 'verified');
+    const isValidModelCount = data && typeof data.modelCount === 'number';
+
+    if (!isValidAuth || !isValidModelCount) {
+      return res.status(503).json({
+        code: 'AUTH_PENDING',
+        message: '게이트웨이 응답에서 계정 권한(audienceAuthorization) 또는 모델 수(modelCount)가 확인되지 않았습니다.'
+      });
+    }
+
+    // 실제로 검증된 값만 전달
     return res.status(200).json({
-      transportChecked: Boolean(data.transportChecked ?? true),
-      audienceAuthorization: data.audienceAuthorization === 'test' ? 'test' : 'verified',
-      modelCount: typeof data.modelCount === 'number' ? data.modelCount : 2,
+      transportChecked: Boolean(data.transportChecked),
+      audienceAuthorization: data.audienceAuthorization,
+      modelCount: data.modelCount,
       help: data.help || '수업용 AI 게이트웨이 연결 확인 완료'
     });
   } catch (err) {
