@@ -350,11 +350,15 @@
     * `event`가 null이고 오류가 없으면 `보안 기록에서 기록을 먼저 고르세요.`를 안내합니다.
     * `status === 'loading'` 시 `설명 요청 중...`을 표시합니다.
     * `executed === true`인 제안은 시스템 규칙 위반으로 즉시 거부(`EXECUTED_PROPOSAL_REJECTED`)합니다.
+    * `evidenceIds`가 없거나 비어있는 경우, 또는 `event.evidence`가 비어있는 경우 근거 부족(`INSUFFICIENT_EVIDENCE`)으로 실패 처리하며 성공 표식을 부여하지 않습니다.
     * `evidenceIds`가 `event.evidence`에 존재하지 않는 경우(`unknown_evidence`) 설명을 거부(`INVALID_EVIDENCE`)하며 가상 근거를 생성하지 않습니다.
     * 성공한 설명에만 `data-student-explanation-event=event.id` 속성을 부여합니다.
     * 사건 ID, `AI 설명(참고용)` 요약, 인용 근거(`ID — 근거 글`), 적용 규칙(`ID — 규칙 글`)을 표시합니다.
     * `access`, `session`, `device` 중 `unknown` 상태를 `확인 불가(unknown)`로 표기하며 정상이나 안전으로 왜곡하지 않습니다.
     * 지원 조치가 없는 경우(`supportedActions` 부재) `연동 시스템이 지원하는 조치가 없어 제안이 없습니다(정상)`를 안내하며, 제안이 있는 경우 `사람 확인이 필요하며 실행되지 않았습니다`를 명시하고 실행 버튼은 생성하지 않습니다.
+  * **지연 응답 무효화 및 요청 식별 (`public/app.js: explainSecurityEvent`)**:
+    * 요청 시퀀스 식별자(`currentExplainRequestId`) 및 `AbortController`를 통해 신규 요청 시 이전 요청을 즉시 중단합니다.
+    * 늦게 도착한 비동기 응답이 현재 화면을 덮어쓰지 않도록 요청 식별자를 대조하여 이전 응답을 완전히 무효화합니다.
 * **다시 실행하는 방법**:
   * 단위 테스트 검증:
     ```bash

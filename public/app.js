@@ -165,19 +165,37 @@ export function resetAiConnection(container) {
   }
 }
 
+// 18단계: 사건 설명 요청 취소 및 지연 응답 무효화를 위한 상태 변수
+let currentExplainController = null;
+let currentExplainRequestId = 0;
+
 /**
  * 보안 사건 AI 설명 요청 함수
  * 과제 기준의 /api/ai/explain 경로를 호출하여 사건 설명을 생성하고 renderExplanation으로 전달합니다.
- * @param {string} eventId
+ * 신규 요청 시작 시 이전 요청을 중단하고 시퀀스 번호를 비교하여 지연된 응답을 완전히 무시합니다.
+ * @param {string|Object} eventOrId
  * @param {HTMLElement} [container]
  */
-export async function explainSecurityEvent(eventId, container) {
+export async function explainSecurityEvent(eventOrId, container) {
   const target = container || document.getElementById('explanation-container');
   if (!target) return;
 
+  // 이전 진행 중인 사건 설명 요청 즉시 중단
+  if (currentExplainController) {
+    currentExplainController.abort();
+  }
+
+  // 신규 요청 시퀀스 식별자 할당 및 AbortController 생성
+  const requestId = ++currentExplainRequestId;
+  currentExplainController = new AbortController();
+  const signal = currentExplainController.signal;
+
+  const event = typeof eventOrId === 'object' && eventOrId !== null ? eventOrId : { id: eventOrId };
+  const eventId = event?.id;
+
   const renderFn = studentView.renderExplanation || renderExplanation;
   renderFn({
-    event: { id: eventId },
+    event,
     explanation: { status: 'loading' }
   }, target);
 
@@ -185,13 +203,20 @@ export async function explainSecurityEvent(eventId, container) {
     const res = await fetch('/api/ai/explain', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventId })
+      body: JSON.stringify({ eventId }),
+      signal
     });
+
+    // 다른 요청이 시작되었거나 취소된 경우 지연 응답 완전 무시
+    if (requestId !== currentExplainRequestId || signal.aborted) {
+      return;
+    }
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      if (requestId !== currentExplainRequestId || signal.aborted) return;
       renderFn({
-        event: { id: eventId },
+        event,
         explanation: { status: 'error', error: err },
         checkedAt: new Date().toISOString()
       }, target);
@@ -199,20 +224,30 @@ export async function explainSecurityEvent(eventId, container) {
     }
 
     const data = await res.json();
+    if (requestId !== currentExplainRequestId || signal.aborted) return;
+
     renderFn({
-      event: { id: eventId },
+      event,
       explanation: data,
       checkedAt: new Date().toISOString()
     }, target);
   } catch (err) {
+    // 취소로 인한 중단이거나 구버전 요청 응답인 경우 무시
+    if (requestId !== currentExplainRequestId || signal.aborted || err?.name === 'AbortError') {
+      return;
+    }
     renderFn({
-      event: { id: eventId },
+      event,
       explanation: {
         status: 'error',
         error: { code: 'EXPLANATION_FAILED', message: err?.message || '사건 설명 생성 오류' }
       },
       checkedAt: new Date().toISOString()
     }, target);
+  } finally {
+    if (requestId === currentExplainRequestId) {
+      currentExplainController = null;
+    }
   }
 }
 

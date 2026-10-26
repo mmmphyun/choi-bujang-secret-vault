@@ -245,10 +245,16 @@ test('6. renderAiConnection: 재점검 성공 시 이전 오류 제거 확인 (a
 test('7. renderExplanation: ok 상태 시 data-student-explanation-event 속성 부여 및 요약 표시 확인', () => {
   const container = new MockElement('div');
   const root = renderExplanation({
-    event: { id: 'evt-2026-10-001' },
+    event: {
+      id: 'evt-2026-10-001',
+      evidence: [{ id: 'evi-1', text: '비정상 접근 패턴 감지' }]
+    },
     explanation: {
       status: 'ok',
-      data: { summary: '비정상적인 접근 패턴이 감지되어 차단되었습니다.' }
+      data: {
+        summary: '비정상적인 접근 패턴이 감지되어 차단되었습니다.',
+        evidenceIds: ['evi-1']
+      }
     },
     checkedAt: '2026-10-26T10:15:00Z'
   }, container);

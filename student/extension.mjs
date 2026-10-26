@@ -1095,36 +1095,61 @@ export function renderExplanation({ event, explanation, checkedAt } = {}, target
     return root;
   }
 
-  // 5. 근거 일치성 검증 (evidence binding check)
+  // 5. 근거 유효성 및 일치성 검증 (evidence binding & sufficiency check)
   const eventEvidences = Array.isArray(event?.evidence) ? event.evidence : [];
   const explanationEvidenceIds = Array.isArray(explanation?.data?.evidenceIds) ? explanation.data.evidenceIds : null;
 
-  if (explanationEvidenceIds !== null && explanationEvidenceIds.length > 0) {
-    const missingEvidenceIds = explanationEvidenceIds.filter(id => !eventEvidences.some(e => e.id === id));
-    if (missingEvidenceIds.length > 0) {
-      const pFail = document.createElement('p');
-      pFail.className = 'explanation-fail-notice';
-      pFail.textContent = 'AI 설명 실패: 근거가 맞지 않아 설명을 쓸 수 없습니다.';
-      root.appendChild(pFail);
+  // 1) 기록에 근거가 없거나(event.evidence 비어있음), AI 설명에 근거 인용이 없거나 비어있는 경우 (근거 부족)
+  if (eventEvidences.length === 0 || !explanationEvidenceIds || explanationEvidenceIds.length === 0) {
+    const pFail = document.createElement('p');
+    pFail.className = 'explanation-fail-notice';
+    pFail.textContent = 'AI 설명 실패: 근거가 부족하여 설명을 채택할 수 없습니다.';
+    root.appendChild(pFail);
 
-      const pCode = document.createElement('p');
-      pCode.className = 'explanation-error-code';
-      pCode.textContent = '오류 코드: INVALID_EVIDENCE';
-      root.appendChild(pCode);
+    const pCode = document.createElement('p');
+    pCode.className = 'explanation-error-code';
+    pCode.textContent = '오류 코드: INSUFFICIENT_EVIDENCE';
+    root.appendChild(pCode);
 
-      const pMsg = document.createElement('p');
-      pMsg.className = 'explanation-error-message';
-      pMsg.textContent = `불일치 근거 ID: ${missingEvidenceIds.join(', ')}`;
-      root.appendChild(pMsg);
+    const pMsg = document.createElement('p');
+    pMsg.className = 'explanation-error-message';
+    pMsg.textContent = '기록의 근거가 비어 있거나 AI 설명에 인용된 근거 ID가 없어 실패로 처리합니다.';
+    root.appendChild(pMsg);
 
-      const pKeep = document.createElement('p');
-      pKeep.className = 'explanation-keep-record';
-      pKeep.textContent = '기록은 그대로 유지됩니다.';
-      root.appendChild(pKeep);
+    const pKeep = document.createElement('p');
+    pKeep.className = 'explanation-keep-record';
+    pKeep.textContent = '기록은 그대로 유지됩니다.';
+    root.appendChild(pKeep);
 
-      if (container) container.appendChild(root);
-      return root;
-    }
+    if (container) container.appendChild(root);
+    return root;
+  }
+
+  // 2) AI 설명의 evidenceIds 중 기록에 없는 근거 ID가 포함된 경우 (근거 불일치)
+  const missingEvidenceIds = explanationEvidenceIds.filter(id => !eventEvidences.some(e => e.id === id));
+  if (missingEvidenceIds.length > 0) {
+    const pFail = document.createElement('p');
+    pFail.className = 'explanation-fail-notice';
+    pFail.textContent = 'AI 설명 실패: 근거가 맞지 않아 설명을 쓸 수 없습니다.';
+    root.appendChild(pFail);
+
+    const pCode = document.createElement('p');
+    pCode.className = 'explanation-error-code';
+    pCode.textContent = '오류 코드: INVALID_EVIDENCE';
+    root.appendChild(pCode);
+
+    const pMsg = document.createElement('p');
+    pMsg.className = 'explanation-error-message';
+    pMsg.textContent = `불일치 근거 ID: ${missingEvidenceIds.join(', ')}`;
+    root.appendChild(pMsg);
+
+    const pKeep = document.createElement('p');
+    pKeep.className = 'explanation-keep-record';
+    pKeep.textContent = '기록은 그대로 유지됩니다.';
+    root.appendChild(pKeep);
+
+    if (container) container.appendChild(root);
+    return root;
   }
 
   const eventId = event?.id || '(미제공)';

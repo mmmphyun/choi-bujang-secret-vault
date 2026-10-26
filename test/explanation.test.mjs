@@ -179,19 +179,43 @@ test('3. unknown_evidence: 존재하지 않는 근거 ID 포함 시 거부 및 d
   assert.ok(root.textContent.includes('기록은 그대로 유지됩니다.'));
 });
 
-test('4. insufficient_evidence: event가 null이어도 error 발생 시 안전한 오류 코드/메시지 노출', () => {
+test('4. insufficient_evidence: 근거 부재·누락 및 error 상태 시 안전한 오류 처리와 속성 미부여', () => {
   const container = new MockElement('div');
-  const root = renderExplanation({
+
+  // 1) event가 null이어도 error 발생 시 안전한 오류 코드/메시지 노출
+  const rootErr = renderExplanation({
     event: null,
     explanation: {
       status: 'error',
       error: { code: 'RATE_LIMIT', message: '요청 한도 초과' }
     }
   }, container);
+  assert.equal(rootErr.getAttribute('data-student-explanation-event'), null);
+  assert.ok(rootErr.textContent.includes('RATE_LIMIT'));
+  assert.ok(rootErr.textContent.includes('기록은 그대로 유지됩니다.'));
 
-  assert.equal(root.getAttribute('data-student-explanation-event'), null);
-  assert.ok(root.textContent.includes('RATE_LIMIT'));
-  assert.ok(root.textContent.includes('기록은 그대로 유지됩니다.'));
+  // 2) event.evidence가 비어 있는 경우: 근거 부족(INSUFFICIENT_EVIDENCE) 실패 처리
+  const emptyEvidenceEvent = { ...sampleEvent, evidence: [] };
+  const rootEmptyEvi = renderExplanation({
+    event: emptyEvidenceEvent,
+    explanation: {
+      status: 'ok',
+      data: { summary: '근거 없는 사건 설명', evidenceIds: ['evi-auth-fail'], proposals: [] }
+    }
+  }, container);
+  assert.equal(rootEmptyEvi.getAttribute('data-student-explanation-event'), null, '근거 없는 기록은 속성 미부여');
+  assert.ok(rootEmptyEvi.textContent.includes('INSUFFICIENT_EVIDENCE'));
+
+  // 3) explanation.data.evidenceIds가 없거나 비어 있는 경우: 근거 부족 실패 처리
+  const rootNoEvidenceIds = renderExplanation({
+    event: sampleEvent,
+    explanation: {
+      status: 'ok',
+      data: { summary: '인용 ID 없는 설명', evidenceIds: [], proposals: [] }
+    }
+  }, container);
+  assert.equal(rootNoEvidenceIds.getAttribute('data-student-explanation-event'), null, '인용 ID 누락 시 속성 미부여');
+  assert.ok(rootNoEvidenceIds.textContent.includes('INSUFFICIENT_EVIDENCE'));
 });
 
 test('5. wrong_event_rejected: 오류 없이 event만 null인 경우 기록 선택 안내 표시 및 data 속성 미부여', () => {
@@ -272,7 +296,7 @@ test('7. unknown_state: unknown 값을 확인 불가로 표시하며 정상/안�
   assert.ok(root.textContent.includes('연동 시스템이 지원하는 조치가 없어 제안이 없습니다(정상)'));
 });
 
-test('8. explanation_refresh: 다른 이벤트 선택 또는 실패 시 이전 설명 및 속성 초기화', () => {
+test('8. explanation_refresh: 이전 설명 및 속성 초기화 및 public/app.js 지연 응답 무효화 검증', () => {
   const container = new MockElement('div');
 
   // 1차 성공
@@ -298,6 +322,12 @@ test('8. explanation_refresh: 다른 이벤트 선택 또는 실패 시 이전 �
   assert.ok(container.textContent.includes('TIMEOUT'));
   const childWrapper = container.children[0];
   assert.equal(childWrapper.getAttribute('data-student-explanation-event'), null, '실패 시 속성이 남아있지 않아야 함');
+
+  // public/app.js 소스 내 사건 설명 지연 응답 무효화(요청 시퀀스 추적 및 AbortController) 검증
+  const appJsSrc = fs.readFileSync('public/app.js', 'utf-8');
+  assert.ok(appJsSrc.includes('currentExplainRequestId'), 'public/app.js에 currentExplainRequestId 요청 식별자가 있어야 함');
+  assert.ok(appJsSrc.includes('currentExplainController'), 'public/app.js에 currentExplainController가 있어야 함');
+  assert.ok(appJsSrc.includes('signal.aborted'), 'public/app.js에 신호 중단 확인 로직이 있어야 함');
 });
 
 test('9. non_ai_regression: AI 설명 수정 후에도 renderEvents는 기존 계약대로 정상 동작함', () => {
