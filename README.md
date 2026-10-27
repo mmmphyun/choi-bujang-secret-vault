@@ -366,3 +366,32 @@
     ```
 
 
+
+## 19단계: 보안 조치 요청 상태와 실제 결과 구분
+
+* **작동하는 기능**:
+  * **보안 조치 상태 및 실제 효과 분리 렌더링 (
+enderAction)**:
+    * 상태 분기(idle, loading, prepared, executing, pending, succeeded, denied, ailed, unknown, expired, error)를 IT 표준 한국어로 렌더링합니다.
+    * loading: '조치 준비 또는 결과 조회 중'으로 표시하여 결과 조기 확정을 방지합니다.
+    * prepared: '준비됨·미실행(prepared)' 상태로 표시하고, 확인 기한(confirmationExpiresAt)과 함께 제공 화면에서의 사용자 직접 확인 집행을 안내합니다.
+    * executing: '서버에 전달 중(executing)' 및 '완료 아님'을 명시합니다.
+    * pending: '서버 접수·처리 중(pending)' 상태로 표시하며, 서버 접수 응답(ACK)은 실행 성공이나 실제 효과가 아님을 명시합니다.
+    * succeeded: observation.effectApplied === true인 경우에만 '효과 확인(succeeded)', 관측 시각(observedAt), effectApplied: true, 
+eceiptId를 표시합니다. 조건 불충족 시 성공으로 단정하지 않고 '결과 불명(unknown)'으로 처리합니다.
+    * unknown: 성공이나 효과 없음으로 단정하지 않고 '결과만 재조회'하도록 안내합니다.
+    * expired: '확인 기한 지남(expired)' 안내 및 조치 재준비를 안내합니다.
+    * denied / ailed: 연동 시스템의 거절/실패 사유(message)를 표시합니다.
+    * error: 안전한 오류 코드 및 정제된 메시지를 표시합니다.
+    * 식별자 바인딩: 사건 ID(event.id), 근거 ID, 조치 ID(ctionId), 대상 ID/세대(	arget.id, 	arget.generation), 요청 ID(
+eceipt.requestId), 영수증 ID(
+eceipt.receiptId), 버전(
+eceipt.version)을 표시합니다.
+    * DOM 속성 바인딩: 최상위 요소에 data-student-action-event(event.id) 및 data-student-action-request(receipt.requestId) 속성을 설정합니다.
+    * 이전 상태 초기화: 새 입력 전달 시 이전 대상·요청·결과 표시를 완전히 초기화(ction_refresh)합니다.
+    * 비침투적 설계: 학생 코드 내부에 조치 버튼, POST 요청, 인증 티켓을 추가하지 않고 제공 화면의 버튼을 사용하도록 안내합니다.
+* **다시 실행하는 방법**:
+  * 단위 테스트 검증:
+    `powershell
+    npm run test:r5
+    `

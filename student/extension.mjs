@@ -446,7 +446,8 @@ export function createStudentView() {
     renderEvents,
     renderStatus,
     renderAiConnection,
-    renderExplanation
+    renderExplanation,
+    renderAction
   };
 }
 
@@ -1308,6 +1309,233 @@ export function renderExplanation({ event, explanation, checkedAt } = {}, target
 
   if (container) {
     container.appendChild(root);
+  }
+
+  return root;
+}
+
+
+/**
+ * 19단계: 보안 조치 요청 상태 및 관측 결과 분리 렌더링
+ * @param {Object} [params]
+ * @param {string} [params.status='idle'] idle·loading·executing·prepared·pending·succeeded·denied·failed·unknown·error·expired
+ * @param {Object} [params.event] 사건 객체
+ * @param {string} [params.actionId] 조치 식별자
+ * @param {Object} [params.target] 대상 { id, generation }
+ * @param {Object} [params.receipt] 영수증 { requestId, receiptId, eventId, actionId, status, version, replayed }
+ * @param {Object} [params.observation] 관측 결과 { observedAt, effectApplied }
+ * @param {string} [params.message] 안내 메시지
+ * @param {string} [params.confirmationExpiresAt] 사람 확인 기한
+ * @param {Object} [params.error] 오류 객체 { code, message }
+ * @param {HTMLElement} [targetContainer] 마운트할 상위 요소
+ * @returns {HTMLElement} 렌더링된 최상위 조치 뷰 요소
+ */
+export function renderAction(
+  {
+    status = 'idle',
+    event,
+    actionId,
+    target,
+    receipt,
+    observation,
+    message,
+    confirmationExpiresAt,
+    error
+  } = {},
+  targetContainer
+) {
+  // 새 입력 전달 시 이전 내용 전체 초기화 (action_refresh)
+  if (targetContainer) {
+    targetContainer.textContent = '';
+  }
+
+  const root = document.createElement('div');
+  root.className = 'student-action-view';
+
+  // 바깥 요소 속성 바인딩: 있는 값만 부여 (current_intent_binding)
+  if (event && event.id) {
+    root.setAttribute('data-student-action-event', String(event.id));
+  }
+  if (receipt && receipt.requestId) {
+    root.setAttribute('data-student-action-request', String(receipt.requestId));
+  }
+
+  // 1. 식별자 및 대상 바인딩 영역 (있는 값만 textContent로 표시)
+  const metaSection = document.createElement('div');
+  metaSection.className = 'student-action-meta';
+
+  const metaList = document.createElement('ul');
+  metaList.className = 'student-action-meta-list';
+
+  if (event && event.id) {
+    const li = document.createElement('li');
+    li.className = 'student-action-meta-item';
+    li.textContent = `사건 ID: ${event.id}`;
+    metaList.appendChild(li);
+  }
+
+  // 근거 ID 추출 (event.evidence.id 또는 event.evidenceId)
+  const evidenceId = event?.evidence?.id || event?.evidenceId || (Array.isArray(event?.evidences) && event.evidences[0]?.id) || null;
+  if (evidenceId) {
+    const li = document.createElement('li');
+    li.className = 'student-action-meta-item';
+    li.textContent = `근거 ID: ${evidenceId}`;
+    metaList.appendChild(li);
+  }
+
+  if (actionId) {
+    const li = document.createElement('li');
+    li.className = 'student-action-meta-item';
+    li.textContent = `조치 ID: ${actionId}`;
+    metaList.appendChild(li);
+  }
+
+  if (target && target.id) {
+    const li = document.createElement('li');
+    li.className = 'student-action-meta-item';
+    const genText = (target.generation !== undefined && target.generation !== null) ? ` (세대: ${target.generation})` : '';
+    li.textContent = `실제 대상 ID: ${target.id}${genText}`;
+    metaList.appendChild(li);
+  }
+
+  if (receipt && receipt.requestId) {
+    const li = document.createElement('li');
+    li.className = 'student-action-meta-item';
+    li.textContent = `요청 ID: ${receipt.requestId}`;
+    metaList.appendChild(li);
+  }
+
+  if (receipt && receipt.receiptId) {
+    const li = document.createElement('li');
+    li.className = 'student-action-meta-item';
+    li.textContent = `영수증 ID: ${receipt.receiptId}`;
+    metaList.appendChild(li);
+  }
+
+  if (receipt && receipt.version !== undefined && receipt.version !== null) {
+    const li = document.createElement('li');
+    li.className = 'student-action-meta-item';
+    li.textContent = `버전: ${receipt.version}`;
+    metaList.appendChild(li);
+  }
+
+  if (metaList.children.length > 0) {
+    metaSection.appendChild(metaList);
+    root.appendChild(metaSection);
+  }
+
+  // 2. 상태별 상세 본문 영역
+  const statusSection = document.createElement('div');
+  statusSection.className = `student-action-status status-${status}`;
+
+  const statusTitle = document.createElement('h4');
+  statusTitle.className = 'student-action-status-title';
+
+  const statusDesc = document.createElement('p');
+  statusDesc.className = 'student-action-status-desc';
+
+  // 상태별 분기 처리
+  switch (status) {
+    case 'idle': {
+      statusTitle.textContent = '아직 미실행(idle)';
+      statusDesc.textContent = '조치 요청이 실행되지 않았습니다.';
+      break;
+    }
+
+    case 'loading': {
+      statusTitle.textContent = '조치 준비 또는 결과 조회 중(loading)';
+      statusDesc.textContent = '연동 시스템 처리 준비 또는 조치 결과를 조회하는 중입니다.';
+      break;
+    }
+
+    case 'prepared': {
+      statusTitle.textContent = '준비됨·미실행(prepared)';
+      const expiryText = confirmationExpiresAt ? `확인 기한: ${confirmationExpiresAt}` : '확인 기한 정보 없음';
+      statusDesc.textContent = `조치가 준비되었으나 실행되지 않은 상태입니다. ${expiryText}. 제공 화면에서 대상과 조치를 확인한 후 집행하십시오. 조치 버튼 및 확인 티켓은 제공 화면을 사용해야 합니다.`;
+      break;
+    }
+
+    case 'executing': {
+      statusTitle.textContent = '서버에 전달 중(executing)';
+      statusDesc.textContent = '조치 요청을 서버에 전달하고 있습니다. 결과가 아직 확인되지 않았습니다(완료 아님).';
+      break;
+    }
+
+    case 'pending': {
+      statusTitle.textContent = '서버 접수·처리 중(pending)';
+      statusDesc.textContent = '서버가 조치 요청을 접수하여 처리 중입니다. 서버의 접수 응답(ACK)은 실행 성공이나 효과가 아닙니다. 결과가 아직 확인되지 않았습니다(완료 아님).';
+      break;
+    }
+
+    case 'succeeded': {
+      // observation.effectApplied === true 인 경우에만 효과 확인으로 판정
+      if (observation && observation.effectApplied === true) {
+        statusTitle.textContent = '효과 확인(succeeded)';
+        const observedAtText = observation.observedAt ? ` (관측 시각: ${observation.observedAt})` : '';
+        const receiptIdText = receipt?.receiptId ? ` [영수증 ID: ${receipt.receiptId}]` : '';
+        statusDesc.textContent = `연동 시스템에서 조치 효과가 확인되었습니다. effectApplied: true${observedAtText}${receiptIdText}`;
+      } else {
+        // 조건이 맞지 않으면 결과 불명으로 처리 (unknown_not_success)
+        statusTitle.textContent = '결과 불명(unknown)';
+        statusDesc.textContent = '연동 시스템의 조치 효과가 확인되지 않았습니다. 효과 없음으로도 성공으로도 판단하지 말고 연동 시스템 결과만 재조회하십시오.';
+      }
+      break;
+    }
+
+    case 'denied': {
+      statusTitle.textContent = '거절(denied)';
+      statusDesc.textContent = message ? `연동 시스템 조치 거절 사유: ${message}` : '연동 시스템에서 조치 요청이 거절되었습니다.';
+      break;
+    }
+
+    case 'failed': {
+      statusTitle.textContent = '실패(failed)';
+      statusDesc.textContent = message ? `연동 시스템 조치 실패 사유: ${message}` : '연동 시스템에서 조치 실행에 실패했습니다.';
+      break;
+    }
+
+    case 'unknown': {
+      statusTitle.textContent = '결과 불명(unknown)';
+      statusDesc.textContent = '효과 없음으로도 성공으로도 판단하지 말고 연동 시스템 결과만 재조회하십시오.';
+      break;
+    }
+
+    case 'expired': {
+      statusTitle.textContent = '확인 기한 지남(expired)';
+      statusDesc.textContent = '확인 기한이 지났습니다. 조치를 다시 준비해 주십시오.';
+      break;
+    }
+
+    case 'error': {
+      statusTitle.textContent = '요청 처리 안 됨(error)';
+      const errCode = error?.code ? `[${String(error.code).replace(/[<>]/g, '')}] ` : '';
+      const errMsg = error?.message ? String(error.message).replace(/[<>]/g, '') : '알 수 없는 오류가 발생했습니다.';
+      statusDesc.textContent = `요청이 처리되지 않았습니다. ${errCode}${errMsg}`;
+      break;
+    }
+
+    default: {
+      statusTitle.textContent = `미지정 상태(${status})`;
+      statusDesc.textContent = '효과 없음으로도 성공으로도 판단하지 말고 연동 시스템 결과만 재조회하십시오.';
+      break;
+    }
+  }
+
+  statusSection.appendChild(statusTitle);
+  statusSection.appendChild(statusDesc);
+  root.appendChild(statusSection);
+
+  // 제공 화면 가이드 안내 (학생 코드에 조치 버튼/POST/티켓 추가 금지 준수)
+  const noticeSection = document.createElement('div');
+  noticeSection.className = 'student-action-notice';
+  const noticeText = document.createElement('p');
+  noticeText.className = 'student-action-notice-text';
+  noticeText.textContent = '안내: 조치 준비, 사람 확인 집행, 결과 재조회 및 조치 화면 취소는 제공 화면의 조작 영역을 사용하십시오.';
+  noticeSection.appendChild(noticeText);
+  root.appendChild(noticeSection);
+
+  if (targetContainer) {
+    targetContainer.appendChild(root);
   }
 
   return root;
