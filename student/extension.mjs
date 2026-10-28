@@ -1374,8 +1374,13 @@ export function renderAction(
     metaList.appendChild(li);
   }
 
-  // 근거 ID 추출 (event.evidence.id 또는 event.evidenceId)
-  const evidenceId = event?.evidence?.id || event?.evidenceId || (Array.isArray(event?.evidences) && event.evidences[0]?.id) || null;
+  // 근거 ID 추출 (event.evidence 배열 또는 단일 객체)
+  const evidenceId =
+    (Array.isArray(event?.evidence) && event.evidence[0]?.id) ||
+    event?.evidence?.id ||
+    event?.evidenceId ||
+    (Array.isArray(event?.evidences) && event.evidences[0]?.id) ||
+    null;
   if (evidenceId) {
     const li = document.createElement('li');
     li.className = 'student-action-meta-item';

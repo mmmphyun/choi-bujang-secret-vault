@@ -130,9 +130,10 @@ test('3. human_confirmation: prepared 상태에서 사람 확인 안내 및 학�
 });
 
 test('4. current_intent_binding: 식별자(event.id, 근거 ID, actionId, target, receipt) 표시 및 data-* 속성 부여', () => {
-  const dummyEvent = {
+  // Case A: event.evidence가 배열인 경우 (공식 프로젝트 규격)
+  const dummyEventArray = {
     id: 'evt-sec-999',
-    evidence: { id: 'evi-888' }
+    evidence: [{ id: 'evi-888', text: '비정상 접속 탐지' }]
   };
   const dummyTarget = {
     id: 'node-srv-01',
@@ -146,7 +147,7 @@ test('4. current_intent_binding: 식별자(event.id, 근거 ID, actionId, target
 
   const el = renderAction({
     status: 'pending',
-    event: dummyEvent,
+    event: dummyEventArray,
     actionId: 'isolate-network',
     target: dummyTarget,
     receipt: dummyReceipt
@@ -159,12 +160,23 @@ test('4. current_intent_binding: 식별자(event.id, 근거 ID, actionId, target
   // 텍스트 바인딩 확인
   const text = el.textContent;
   assert.ok(text.includes('evt-sec-999'), '사건 ID가 표시되어야 함');
-  assert.ok(text.includes('evi-888'), '근거 ID가 표시되어야 함');
+  assert.ok(text.includes('evi-888'), '배열 evidence[0].id 근거 ID가 표시되어야 함');
   assert.ok(text.includes('isolate-network'), '조치 ID가 표시되어야 함');
   assert.ok(text.includes('node-srv-01') && text.includes('3'), '대상 ID 및 generation이 표시되어야 함');
   assert.ok(text.includes('req-uuid-1234'), '요청 ID가 표시되어야 함');
   assert.ok(text.includes('rcpt-5678'), '영수증 ID가 표시되어야 함');
   assert.ok(text.includes('2'), '버전이 표시되어야 함');
+
+  // Case B: event.evidence가 단일 객체인 경우도 호환성 지원
+  const dummyEventObj = {
+    id: 'evt-sec-777',
+    evidence: { id: 'evi-777' }
+  };
+  const elObj = renderAction({
+    status: 'pending',
+    event: dummyEventObj
+  });
+  assert.ok(elObj.textContent.includes('evi-777'), '단일 객체 evidence.id도 표시되어야 함');
 });
 
 test('5. observed_server_result: succeeded 상태에서 effectApplied===true 조건 엄격 검증', () => {
