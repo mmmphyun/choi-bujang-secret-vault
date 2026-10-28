@@ -1473,16 +1473,22 @@ export function renderAction(
     }
 
     case 'succeeded': {
-      // observation.effectApplied === true 인 경우에만 효과 확인으로 판정
-      if (observation && observation.effectApplied === true) {
+      // observation.effectApplied === true, observation.observedAt, receipt.receiptId 세 값이 모두 유효할 때만 효과 확인으로 판정
+      const hasObservedResult = Boolean(
+        observation &&
+        observation.effectApplied === true &&
+        observation.observedAt &&
+        receipt &&
+        receipt.receiptId
+      );
+
+      if (hasObservedResult) {
         statusTitle.textContent = '효과 확인(succeeded)';
-        const observedAtText = observation.observedAt ? ` (관측 시각: ${observation.observedAt})` : '';
-        const receiptIdText = receipt?.receiptId ? ` [영수증 ID: ${receipt.receiptId}]` : '';
-        statusDesc.textContent = `연동 시스템에서 조치 효과가 확인되었습니다. effectApplied: true${observedAtText}${receiptIdText}`;
+        statusDesc.textContent = `연동 시스템에서 조치 효과가 확인되었습니다. effectApplied: true (관측 시각: ${observation.observedAt}) [영수증 ID: ${receipt.receiptId}]`;
       } else {
-        // 조건이 맞지 않으면 결과 불명으로 처리 (unknown_not_success)
+        // 필수 값(effectApplied: true, observedAt, receiptId) 중 하나라도 없으면 결과 불명으로 처리
         statusTitle.textContent = '결과 불명(unknown)';
-        statusDesc.textContent = '연동 시스템의 조치 효과가 확인되지 않았습니다. 효과 없음으로도 성공으로도 판단하지 말고 연동 시스템 결과만 재조회하십시오.';
+        statusDesc.textContent = '연동 시스템의 조치 효과 또는 필수 결과값(관측 시각·영수증 ID)이 확인되지 않았습니다. 효과 없음으로도 성공으로도 판단하지 말고 연동 시스템 결과만 재조회하십시오.';
       }
       break;
     }

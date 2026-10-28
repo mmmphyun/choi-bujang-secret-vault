@@ -217,6 +217,29 @@ test('5. observed_server_result: succeeded 상태에서 effectApplied===true 조
   const noObsText = noObsEl.textContent;
   assert.ok(!noObsText.includes('효과 확인(succeeded)'), 'observation 없을 때 효과 확인 표시 금지');
   assert.ok(noObsText.includes('결과 불명(unknown)'), '결과 불명 처리 필요');
+
+  // Case D: observation.observedAt 누락 -> 결과 불명 처리
+  const noObservedAtEl = renderAction({
+    status: 'succeeded',
+    receipt: { receiptId: 'rcpt-pass-001' },
+    observation: {
+      effectApplied: true
+    }
+  });
+  assert.ok(!noObservedAtEl.textContent.includes('효과 확인(succeeded)'), 'observedAt 누락 시 효과 확인 표시 금지');
+  assert.ok(noObservedAtEl.textContent.includes('결과 불명(unknown)'), 'observedAt 누락 시 결과 불명 처리 필요');
+
+  // Case E: receipt.receiptId 누락 -> 결과 불명 처리
+  const noReceiptIdEl = renderAction({
+    status: 'succeeded',
+    receipt: {},
+    observation: {
+      observedAt: '2026-10-27T17:30:00Z',
+      effectApplied: true
+    }
+  });
+  assert.ok(!noReceiptIdEl.textContent.includes('효과 확인(succeeded)'), 'receiptId 누락 시 효과 확인 표시 금지');
+  assert.ok(noReceiptIdEl.textContent.includes('결과 불명(unknown)'), 'receiptId 누락 시 결과 불명 처리 필요');
 });
 
 test('6. unknown_not_success: unknown 상태 시 성공/효과없음 단정 금지 및 재조회 안내 검증', () => {
