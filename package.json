@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "npx -y vercel dev",
     "build": "node scripts/build-public.mjs",
     "test:r5": "node --test test/*.test.mjs",
     "bundle": "node scripts/bundle.mjs",

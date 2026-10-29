@@ -270,7 +270,8 @@
     * **학생 판정기(`src/decider.mjs`)**: 계약에 명시된 18개 이름만 읽어 기기 등록(`device_registered`), 복합 이상 접속(`step_up_required`), 구역 정책(`zone_policy`) 규칙 판정 수행.
     * **학생 탐지기(`src/detect.mjs`)**: 10분 구간 내 단일 사용자 121건 이상 단시간 대량 조회 시 권한 회수 제안(`propose_revocation`, `burst_read`).
     * **학생 접속 앱(`public/index.html`, `public/manifest.json`)**: PWA 지원, 인메모리 기기 승인 통제, 탈환 작전실 대시보드 및 실측 대조표 렌더링.
-    * **학생 자료실 API(`api/*`)**: Supabase Auth 연동, 인가/IDOR 차단, 프록시 일원화, 복구 엔드포인트(`POST /api/notes/restore`), 작전실 요약 엔드포인트(`GET /api/ops/summary`).
+    * **학생 자료실 API(`api/_auth.js`, `api/auth.js`, `api/notes/*`, `api/device/verify.js`, `api/ai/*`)**: Supabase Auth 연동, 인가/IDOR 차단, 프록시 일원화, 복구 엔드포인트(`POST /api/notes/restore`), AI 연결 점검 및 설명.
+    * **제공 시작 틀 API(`api/events.js`, `api/ops/summary.js`, `api/notices/`)**: 기본 감사 기록 및 작전실 메타데이터 제공.
   * **제공 엔진**:
     * **ALEPH SDP 엔진 (출처: 제공 엔진)**: 트래픽 인입, 클라이언트 신원 확인, 판정기(`decide()`) 호출 및 인가 판정 적용, 사건 스트림 전달 및 릴레이 보안 통제.
 
@@ -415,17 +416,25 @@
 * **작동하는 기능**:
   * **상세 실행 설명서 작성 (`docs/STUDENT_RUNBOOK.md`)**:
     * 실제 확인된 Node.js(`v24.22.1`), npm(`11.19.1`), Git(`2.55.0.windows.5`) 환경 명시
-    * PowerShell 실행 경로(`C:\work\aleph-defense`) 및 의존성 설치, 빌드, 65종 단위 테스트 실행, 판정기/탐지기 검증, 종료(`Ctrl+C`), 재실행 절차 정리
+    * PowerShell 실행 경로(`C:\work\aleph-defense`) 및 의존성 설치(`npm install`), 로컬 개발 서버 구동(`npm run dev`), 빌드(`npm run build -- --local`), 65종 단위 테스트(`npm run test:r5`), 판정기/탐지기 검증, 종료(`Ctrl+C`), 재실행 절차 정리
+    * 번들 생성 사전 준비(`bundle-notes.json` 템플릿 생성) 및 `npm run bundle` 실행 절차 안내
     * 브라우저 로컬(`http://localhost:3000`) 및 공개 배포 주소(`https://choi-bujang-secret-vault-evun.vercel.app`) 명시
-  * **시스템 아키텍처 다이어그램 및 데이터 흐름 기술**:
-    * 브라우저 → 로컬 앱 서버(Vercel API) → 접근 제어·XDR 시스템(src/) / AI 게이트웨이 간 데이터 흐름을 Mermaid, ASCII, 표로 다중 작성
+  * **시스템 아키텍처 다이어그램 및 실제 데이터 흐름 기술**:
+    * 브라우저 → 서버리스 API(`api/`) → 외부 서비스(Supabase REST API 직접 호출, 외부 AI 게이트웨이 직접 실측)의 실제 데이터 흐름을 Mermaid, ASCII, 표로 다중 작성
+    * `api/notes/*`는 판정기 호출 없이 Supabase 직접 요청 및 소유자(`owner_id`) 격리 수행, `api/device/verify.js`는 자체 승인 응답 반환, `api/events.js`는 정적 배열 반환, `api/ai/explain.js`는 고정 요약 템플릿 반환 등 실제 코드 동작과 100% 일치시킴
+    * 독립 시뮬레이션 엔진(`src/decider.mjs`, `src/detect.mjs`, `src/policy-manager.mjs`)은 웹 API 미들웨어가 아닌 로컬 테스트 모듈로 명확히 분리
     * 실제 파일 경로 및 공개 주소만 기술하고 비밀 설정값(토큰, API 키)은 전면 배제
-  * **기능 경계 및 검증 상태 구분**:
-    * 제공 코드 경계(`public/app.js`, `api/`)와 학생 구현 함수(`student/extension.mjs`, `src/decider.mjs`, `src/detect.mjs`, `src/policy-manager.mjs`) 명확히 분리
+  * **기능 경계 및 검증 상태 구분 (일원화)**:
+    * 제공 코드 경계: `public/index.html`, `public/app.js`, `api/events.js`, `api/ops/summary.js`, `api/notices/`, `docs/DECIDER_REQUEST.md`, `docs/DETECT_EVENTS.md`, `scripts/`
+    * 학생 작성/수정 코드: `student/extension.mjs`, `api/_auth.js`, `api/auth.js`, `api/notes/`, `api/device/verify.js`, `api/ai/`, `src/`, `docs/STUDENT_RUNBOOK.md`, `package.json`
     * 직접 실측 완료된 65개 단위 테스트 및 검증 스크립트와 미확인 항목(심판 서버 실시간 연동, 사내망 mTLS 연동 등) 명시
-    * 오류별(401, 403, CONTRACT_MISMATCH, AI 인증 실패 등) 점검 및 조치 순서 정리
+    * 오류별(403: 소유자/자료구역 불일치, 400: 기기식별자/제목누락/해시불일치, 401: 토큰 누락/만료 등) 실제 소스코드 원인과 점검 순서 정리
 * **다시 실행하는 방법**:
   * [docs/STUDENT_RUNBOOK.md](docs/STUDENT_RUNBOOK.md) 문서 참조
+  * 로컬 개발 서버 구동:
+    ```bash
+    npm run dev
+    ```
   * 전체 테스트 검증:
     ```bash
     npm run test:r5
