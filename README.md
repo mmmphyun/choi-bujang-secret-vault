@@ -370,28 +370,63 @@
 ## 19단계: 보안 조치 요청 상태와 실제 결과 구분
 
 * **작동하는 기능**:
-  * **보안 조치 상태 및 실제 효과 분리 렌더링 (
-enderAction)**:
-    * 상태 분기(idle, loading, prepared, executing, pending, succeeded, denied, ailed, unknown, expired, error)를 IT 표준 한국어로 렌더링합니다.
-    * loading: '조치 준비 또는 결과 조회 중'으로 표시하여 결과 조기 확정을 방지합니다.
-    * prepared: '준비됨·미실행(prepared)' 상태로 표시하고, 확인 기한(confirmationExpiresAt)과 함께 제공 화면에서의 사용자 직접 확인 집행을 안내합니다.
-    * executing: '서버에 전달 중(executing)' 및 '완료 아님'을 명시합니다.
-    * pending: '서버 접수·처리 중(pending)' 상태로 표시하며, 서버 접수 응답(ACK)은 실행 성공이나 실제 효과가 아님을 명시합니다.
-    * succeeded: observation.effectApplied === true인 경우에만 '효과 확인(succeeded)', 관측 시각(observedAt), effectApplied: true, 
-eceiptId를 표시합니다. 조건 불충족 시 성공으로 단정하지 않고 '결과 불명(unknown)'으로 처리합니다.
-    * unknown: 성공이나 효과 없음으로 단정하지 않고 '결과만 재조회'하도록 안내합니다.
-    * expired: '확인 기한 지남(expired)' 안내 및 조치 재준비를 안내합니다.
-    * denied / ailed: 연동 시스템의 거절/실패 사유(message)를 표시합니다.
-    * error: 안전한 오류 코드 및 정제된 메시지를 표시합니다.
-    * 식별자 바인딩: 사건 ID(event.id), 근거 ID, 조치 ID(ctionId), 대상 ID/세대(	arget.id, 	arget.generation), 요청 ID(
-eceipt.requestId), 영수증 ID(
-eceipt.receiptId), 버전(
-eceipt.version)을 표시합니다.
-    * DOM 속성 바인딩: 최상위 요소에 data-student-action-event(event.id) 및 data-student-action-request(receipt.requestId) 속성을 설정합니다.
-    * 이전 상태 초기화: 새 입력 전달 시 이전 대상·요청·결과 표시를 완전히 초기화(ction_refresh)합니다.
+  * **보안 조치 상태 및 실제 효과 분리 렌더링 (`renderAction`)**:
+    * 상태 분기(`idle`, `loading`, `prepared`, `executing`, `pending`, `succeeded`, `denied`, `failed`, `unknown`, `expired`, `error`)를 IT 표준 한국어로 렌더링합니다.
+    * `loading`: '조치 준비 또는 결과 조회 중'으로 표시하여 결과 조기 확정을 방지합니다.
+    * `prepared`: '준비됨·미실행(prepared)' 상태로 표시하고, 확인 기한(`confirmationExpiresAt`)과 함께 제공 화면에서의 사용자 직접 확인 집행을 안내합니다.
+    * `executing`: '서버에 전달 중(executing)' 및 '완료 아님'을 명시합니다.
+    * `pending`: '서버 접수·처리 중(pending)' 상태로 표시하며, 서버 접수 응답(ACK)은 실행 성공이나 실제 효과가 아님을 명시합니다.
+    * `succeeded`: `observation.effectApplied === true`인 경우에만 '효과 확인(succeeded)', 관측 시각(`observedAt`), `effectApplied: true`, `receiptId`를 표시합니다. 조건 불충족 시 성공으로 단정하지 않고 '결과 불명(unknown)'으로 처리합니다.
+    * `unknown`: 성공이나 효과 없음으로 단정하지 않고 '결과만 재조회'하도록 안내합니다.
+    * `expired`: '확인 기한 지남(expired)' 안내 및 조치 재준비를 안내합니다.
+    * `denied` / `failed`: 연동 시스템의 거절/실패 사유(`message`)를 표시합니다.
+    * `error`: 안전한 오류 코드 및 정제된 메시지를 표시합니다.
+    * 식별자 바인딩: 사건 ID(`event.id`), 근거 ID, 조치 ID(`actionId`), 대상 ID/세대(`target.id`, `target.generation`), 요청 ID(`receipt.requestId`), 영수증 ID(`receipt.receiptId`), 버전(`receipt.version`)을 표시합니다.
+    * DOM 속성 바인딩: 최상위 요소에 `data-student-action-event(event.id)` 및 `data-student-action-request(receipt.requestId)` 속성을 설정합니다.
+    * 이전 상태 초기화: 새 입력 전달 시 이전 대상·요청·결과 표시를 완전히 초기화(`action_refresh`)합니다.
     * 비침투적 설계: 학생 코드 내부에 조치 버튼, POST 요청, 인증 티켓을 추가하지 않고 제공 화면의 버튼을 사용하도록 안내합니다.
 * **다시 실행하는 방법**:
   * 단위 테스트 검증:
-    `powershell
+    ```bash
     npm run test:r5
-    `
+    ```
+
+## 20단계: 설치 패키지 버전 및 OSV 취약점 조회 렌더링
+
+* **작동하는 기능**:
+  * **설치 패키지 버전 고정값 렌더링 (`renderVulnerabilities`)**:
+    * `package-lock.json`에 기록된 패키지 버전(`@supabase/supabase-js: 2.117.2`, `jose: 6.2.12`)을 범위 기호(`^`, `~`) 없이 정확한 고정 버전 문자열로 렌더링합니다.
+    * 임의의 추측이나 범위 기호를 노출하지 않습니다.
+  * **OSV 취약점 상태 분기 및 미조회 상태 구분**:
+    * 취약점 발견(`known_vulnerabilities`), 발견된 취약점 없음(`none_found`), 미설정(`not_configured`), 미조회(`not_checked`), 조회 불가(`unverifiable`) 상태를 명확히 구분합니다.
+    * `not_configured`, `not_checked`, `unverifiable` 상태를 '취약점 없음'으로 왜곡하지 않고 조회 미실행/불가 상태로 유지합니다.
+    * `unverifiable` 상태에서도 취약점 데이터(`vulnerabilities`)가 존재하면 해당 취약점 ID를 보존하고 부분 확인 상태로 표기합니다.
+  * **반응형 상태 초기화 및 지연 응답 무효화**:
+    * `loading` 또는 `error` 발생 시 이전 조회 표나 잔존 요소를 완전히 초기화합니다.
+    * 새로운 응답 수신 시 이전 상태를 완전히 대체하여 결과 왜곡을 방지합니다.
+* **다시 실행하는 방법**:
+  * 단위 테스트 검증:
+    ```bash
+    npm run test:r5
+    ```
+
+## 21단계: 학생용 실행 설명서와 시스템 구성도
+
+* **작동하는 기능**:
+  * **상세 실행 설명서 작성 (`docs/STUDENT_RUNBOOK.md`)**:
+    * 실제 확인된 Node.js(`v24.22.1`), npm(`11.19.1`), Git(`2.55.0.windows.5`) 환경 명시
+    * PowerShell 실행 경로(`C:\work\aleph-defense`) 및 의존성 설치, 빌드, 65종 단위 테스트 실행, 판정기/탐지기 검증, 종료(`Ctrl+C`), 재실행 절차 정리
+    * 브라우저 로컬(`http://localhost:3000`) 및 공개 배포 주소(`https://choi-bujang-secret-vault-evun.vercel.app`) 명시
+  * **시스템 아키텍처 다이어그램 및 데이터 흐름 기술**:
+    * 브라우저 → 로컬 앱 서버(Vercel API) → 접근 제어·XDR 시스템(src/) / AI 게이트웨이 간 데이터 흐름을 Mermaid, ASCII, 표로 다중 작성
+    * 실제 파일 경로 및 공개 주소만 기술하고 비밀 설정값(토큰, API 키)은 전면 배제
+  * **기능 경계 및 검증 상태 구분**:
+    * 제공 코드 경계(`public/app.js`, `api/`)와 학생 구현 함수(`student/extension.mjs`, `src/decider.mjs`, `src/detect.mjs`, `src/policy-manager.mjs`) 명확히 분리
+    * 직접 실측 완료된 65개 단위 테스트 및 검증 스크립트와 미확인 항목(심판 서버 실시간 연동, 사내망 mTLS 연동 등) 명시
+    * 오류별(401, 403, CONTRACT_MISMATCH, AI 인증 실패 등) 점검 및 조치 순서 정리
+* **다시 실행하는 방법**:
+  * [docs/STUDENT_RUNBOOK.md](docs/STUDENT_RUNBOOK.md) 문서 참조
+  * 전체 테스트 검증:
+    ```bash
+    npm run test:r5
+    ```
