@@ -202,7 +202,7 @@ npm run policy:restore
      - **DB 반영 실패 무시 및 성공(200) 반환**: 사본 검증 통과 후 Supabase DB에 갱신을 시도하지만, DB 통신 실패(`try-catch`)가 발생하더라도 에러를 무시하고 클라이언트에는 사본 검증 성공 정보를 담아 `200 OK`(`success: true`)를 반환합니다. 따라서 응답이 200이어도 실제 DB 영속화 실패 가능성이 존재합니다.
   4. **기기 확인 (`POST /api/device/verify`)**: JWT 인증 후 요청 본문의 `deviceId` 길이(>=8)를 검사하여 유효하면 자체 승인 응답을 즉시 반환합니다. 판정기(`src/decider.mjs`)를 호출하지 않습니다.
   5. **보안 기록 (`GET /api/events`)**: 탐지기(`src/detect.mjs`)를 실행하지 않고 시작 틀에 내장된 최근 감사 기록 정적 배열(`RECENT_SECURITY_EVENTS`)을 즉시 반환합니다.
-  6. **사건 설명 (`POST /api/ai/explain`)**: 외부 AI 게이트웨이를 호출하지 않고 전달된 `eventId`를 바탕으로 고정 요약 템플릿 문장을 즉시 반환합니다.
+  6. **사건 설명 (`POST /api/ai/explain`)**: 외부 AI 게이트웨이를 호출하지 않고 전달된 `eventId`를 바탕으로 고정 요약 템플릿 문장을 반환하며, 근거 ID(`evidenceIds`)를 포함하지 않아 프론트엔드 렌더러(`renderExplanation`) 연동 시 근거 부족(`INSUFFICIENT_EVIDENCE`)으로 처리됩니다.
   7. **AI 연결 점검 (`GET /api/ai/connection`)**: 외부 AI 게이트웨이(`https://aleph-judge-production.up.railway.app/defense/ai/connection`)로 직접 HTTP 요청을 보내 전송 상태 및 권한을 실측합니다.
   8. **보안 정책 및 탐지 엔진 (`src/`)**: 웹 API의 요청 처리 경로에 배치되지 않으며, `npm run decider:test`, `npm run detect:test` 등의 독립 검증 스크립트에 의해 가상 시나리오를 검증하는 모듈로 분리되어 있습니다.
 
@@ -316,7 +316,7 @@ flowchart TD
 | **메모 복구** | `api/notes/restore.js` | `{ id, owner, contentHash }`<br>(선택적 Bearer JWT) | 1. 사본 파일 부재 시 404 (단, 본문 백업 content, owner_id, contentHash 일치 시 사본 인정)<br>2. 내용 SHA-256 해시 대조(400)<br>3. 본문 및 토큰 소유자 대조(403)<br>4. Supabase DB 갱신 시도하되 실패 무시하고 200 반환 | `200 OK` 복구 사본 정보 반환 (DB 통신 실패 무시) |
 | **기기 확인** | `api/device/verify.js` | `{ deviceId }`, Bearer JWT | JWT 검증 후 `deviceId` 유효성(문자열, >=8) 검사 | 자체 승인 JSON (`approved: true`) 반환 |
 | **보안 사건** | `api/events.js` | `GET /api/events` | 별도 탐지기 호출 없이 정적 배열 5건 반환 | 감사/XDR 기록 배열 반환 |
-| **사건 설명** | `api/ai/explain.js` | `{ eventId }` | 외부 AI 호출 없이 고정 템플릿 요약 문장 반환 | 고정 요약 텍스트 JSON 반환 |
+| **사건 설명** | `api/ai/explain.js` | `{ eventId }` | 외부 AI 호출 없이 고정 템플릿 요약 문장 반환 (근거 ID 미포함으로 렌더러 연동 시 `INSUFFICIENT_EVIDENCE` 처리) | 고정 요약 텍스트 JSON 반환 |
 | **AI 연결 점검** | `api/ai/connection.js` | `GET /api/ai/connection` | 외부 AI 게이트웨이로 직접 fetch 요청 후 전송/권한 실측 | 게이트웨이 연결 상태 및 모델 수 반환 |
 | **독립 판정 엔진** | `src/decider.mjs` | `DECIDER_REQUEST` 규격 JSON | `npm run decider:test` 실행 시 기기 등록 및 구역 규칙 시뮬레이션 | `allow`, `deny`, `step_up` 판정 결과 |
 | **독립 탐지 엔진** | `src/detect.mjs` | 가상 사건 객체 배열 | `npm run detect:test` 실행 시 10분 슬라이딩 윈도우 폭주 탐지 | 위험 경보 및 이상 사건 ID 목록 |

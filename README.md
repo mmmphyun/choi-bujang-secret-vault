@@ -373,24 +373,19 @@
     * 화면에서 과제 기준의 `/api/ai/explain` 엔드포인트를 호출하여 결과를 `renderExplanation`에 전달합니다.
     * `ok` 시 최상위 요소에 `data-student-explanation-event="event.id"` 속성을 부여하고 요약문을 표시합니다. 실패 시에는 해당 속성을 부여하지 않고 "기록은 그대로 유지됩니다."를 안내합니다.
 
-## 18단계: 근거에 연결된 AI 보안 이벤트 설명
+## 18단계: 근거 기반 AI 설명 렌더러 구현 및 실제 API 연동 제한 사항
 
 * **작동하는 기능**:
-  * **근거 기반 보안 사건 설명 (`renderExplanation`)**:
-    * AI 요약을 선택한 이벤트의 실제 근거(`evidence`), 규칙(`rules`), 현재 상태(`state`)와 바인딩하여 표시합니다.
-    * `status === 'error'` 시 `event`가 null이어도 정제된 에러 코드, 메시지 및 `기록은 그대로 유지됩니다.`를 출력합니다.
-    * `event`가 null이고 오류가 없으면 `보안 기록에서 기록을 먼저 고르세요.`를 안내합니다.
-    * `status === 'loading'` 시 `설명 요청 중...`을 표시합니다.
-    * `executed === true`인 제안은 시스템 규칙 위반으로 즉시 거부(`EXECUTED_PROPOSAL_REJECTED`)합니다.
-    * `evidenceIds`가 없거나 비어있는 경우, 또는 `event.evidence`가 비어있는 경우 근거 부족(`INSUFFICIENT_EVIDENCE`)으로 실패 처리하며 성공 표식을 부여하지 않습니다.
-    * `evidenceIds`가 `event.evidence`에 존재하지 않는 경우(`unknown_evidence`) 설명을 거부(`INVALID_EVIDENCE`)하며 가상 근거를 생성하지 않습니다.
-    * 성공한 설명에만 `data-student-explanation-event=event.id` 속성을 부여합니다.
-    * 사건 ID, `AI 설명(참고용)` 요약, 인용 근거(`ID — 근거 글`), 적용 규칙(`ID — 규칙 글`)을 표시합니다.
-    * `access`, `session`, `device` 중 `unknown` 상태를 `확인 불가(unknown)`로 표기하며 정상이나 안전으로 왜곡하지 않습니다.
-    * 지원 조치가 없는 경우(`supportedActions` 부재) `연동 시스템이 지원하는 조치가 없어 제안이 없습니다(정상)`를 안내하며, 제안이 있는 경우 `사람 확인이 필요하며 실행되지 않았습니다`를 명시하고 실행 버튼은 생성하지 않습니다.
+  * **근거 기반 사건 설명 렌더러 규격 (`renderExplanation`)**:
+    * `student/extension.mjs`의 `renderExplanation` 함수는 전달된 설명 데이터에 유효한 근거 ID 목록(`evidenceIds`)이 존재하고 실제 사건 근거(`event.evidence`)와 일치할 때만 인용 근거와 적용 규칙을 바인딩하여 성공 속성(`data-student-explanation-event=event.id`)을 부여하도록 설계되었습니다.
+    * 단위 테스트(`test/explanation.test.mjs`)에서는 모의 데이터를 통해 근거 일치 시 바인딩 동작과 근거 누락 시 안전한 실패 처리를 전수 검증했습니다.
+  * **실제 백엔드 API와의 연동 제한 사항 (실제 동작)**:
+    * 현재 구현된 백엔드 엔드포인트 `api/ai/explain.js`는 `eventId` 기반의 고정 요약 템플릿 문장(`summary`)만을 반환하며 근거 ID(`evidenceIds`)를 반환하지 않습니다.
+    * 따라서 브라우저 화면(`public/app.js`)에서 실제 `/api/ai/explain`을 호출하여 전달할 경우, 렌더러의 엄격한 근거 검증 로직에 의해 **근거 부족(`INSUFFICIENT_EVIDENCE`)으로 실패 처리**되며 성공 속성이 부여되지 않습니다.
+    * 이는 백엔드가 유효한 근거 ID를 제공하지 않을 때 검증되지 않은 요약을 무단 채택하지 않도록 방어하는 의도된 안전 동작입니다.
   * **지연 응답 무효화 및 요청 식별 (`public/app.js: explainSecurityEvent`)**:
-    * 요청 시퀀스 식별자(`currentExplainRequestId`) 및 `AbortController`를 통해 신규 요청 시 이전 요청을 즉시 중단합니다.
-    * 늦게 도착한 비동기 응답이 현재 화면을 덮어쓰지 않도록 요청 식별자를 대조하여 이전 응답을 완전히 무효화합니다.
+    * 요청 시퀀스 식별자(`currentExplainRequestId`) 및 `AbortController`를 통해 신규 요청 시 이전 진행 중 요청을 즉시 중단합니다.
+    * 지연 도착한 비동기 응답이 최신 화면을 덮어쓰지 않도록 요청 식별자를 대조하여 이전 응답을 완전히 무효화합니다.
 * **다시 실행하는 방법**:
   * 단위 테스트 검증:
     ```bash
@@ -454,7 +449,7 @@
     * 브라우저 → 서버리스 API(`api/`) → 외부 서비스(Supabase REST API 직접 호출, 외부 AI 게이트웨이 직접 실측)의 실제 데이터 흐름을 Mermaid, ASCII, 표로 다중 작성
     * `api/notes/*`는 판정기 호출 없이 Supabase 직접 요청 및 소유자(`owner_id`) 격리 수행
     * `api/notes/restore.js`는 선택적 인증(`Authorization` 헤더 존재 시에만 검증)을 지원하며, 저장 파일에 없는 ID라도 요청 본문에 유효한 사본(`content`, `owner_id`, `contentHash` 일치)이 포함되면 복구 대상으로 인정함. 사본 검증 통과 후 DB 통신 실패 여부와 무관하게(에러 무시) 200 성공(`success: true`)을 반환하는 특성을 명시
-    * `api/device/verify.js`는 자체 승인 응답 반환, `api/events.js`는 정적 배열 반환, `api/ai/explain.js`는 고정 요약 템플릿 반환 등 실제 코드 동작과 100% 일치시킴
+    * `api/device/verify.js`는 자체 승인 응답 반환, `api/events.js`는 정적 배열 반환, `api/ai/explain.js`는 고정 요약 템플릿만 반환하고 근거 ID(`evidenceIds`)를 전달하지 않아 렌더러 연동 시 근거 부족(`INSUFFICIENT_EVIDENCE`)으로 처리되는 실제 코드 동작과 100% 일치시킴
     * 독립 시뮬레이션 엔진(`src/decider.mjs`, `src/detect.mjs`, `src/policy-manager.mjs`)은 웹 API 미들웨어가 아닌 로컬 테스트 모듈로 명확히 분리
     * 실제 파일 경로 및 공개 주소만 기술하고 비밀 설정값(토큰, API 키)은 전면 배제
   * **기능 경계 및 검증 상태 구분 (일원화)**:
