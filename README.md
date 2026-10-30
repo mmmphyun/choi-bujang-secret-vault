@@ -1,5 +1,36 @@
 # BYTE BACK 방어전 시작 틀 R5
 
+## 0. 프로젝트 개요 및 지원 환경 (한눈에 보기)
+
+본 프로젝트는 제로 트러스트(Zero Trust) 보안 아키텍처 기반의 안전한 웹 애플리케이션 및 보안 점검 Agent를 구축하는 방어전 저장소입니다.
+
+### 0.1 프로젝트 목적 (Purpose)
+* **비인가 접근 및 IDOR 원천 차단**: Supabase Auth 및 JWT 서명 검증을 통한 신원 인증과 소유자(`owner_id`) 단위 자원 격리
+* **접근 제어 판정 및 이상 탐지**: 등록된 기기 및 안전 신호 기반의 동적 인가(`decide`)와 슬라이딩 윈도우 기반 폭주 조회 탐지(`detectEvents`)
+* **보안 가시성 및 안전 복원**: 프론트엔드 실시간 보안 관측 뷰(AI 설명, 보안 조치 분리, OSV 취약점 진단) 제공 및 SHA-256 무결성 검증 기반 사본 단건 복원
+
+### 0.2 시스템 구성 개요 (System Architecture)
+| 계층 | 역할 및 구성 요소 | 주요 파일 및 엔드포인트 |
+| :--- | :--- | :--- |
+| **프론트엔드** | 정적 웹 UI, 대시보드 및 보안 관측 뷰 | `public/index.html`, `public/app.js`, `student/extension.mjs` |
+| **앱 서버 (API)** | JWT 검증 프록시, 소유자 격리 CRUD, 기기/AI 엔드포인트 | `api/_auth.js`, `api/auth.js`, `api/notes/*`, `api/device/verify.js`, `api/ai/*` |
+| **제공 시작 틀 API** | 감사 기록 및 운영 요약 목 엔드포인트 | `api/events.js`, `api/ops/summary.js`, `api/notices/` |
+| **외부 연동** | 데이터 영속화 및 AI 게이트웨이 | Supabase REST API (`/rest/v1/notes`), 수업용 AI 게이트웨이 |
+| **독립 보안 엔진** | 가상 시나리오 판정, 이상 탐지, 정책 관리 (로컬 검증) | `src/decider.mjs`, `src/detect.mjs`, `src/policy-manager.mjs`, `src/verify-login.mjs` |
+| **검증 및 빌드** | 정적 빌드, 단위 테스트 스위트, 제출 번들링 | `scripts/build-public.mjs`, `scripts/bundle.mjs`, `test/*.test.mjs` |
+
+### 0.3 지원 런타임 및 환경 명세 (Runtime & Environment)
+| 항목 | 요구 사양 (`package.json`) | 실제 확인 및 검증 버전 | 비고 |
+| :--- | :--- | :--- | :--- |
+| **Node.js** | `>=22` | `v24.22.1` | ESM (`"type": "module"`) 및 네이티브 테스트 러너(`node --test`) 사용 |
+| **npm** | 최신 권장 | `11.19.1` | 패키지 의존성 관리 및 실행 스크립트 |
+| **운영체제 (OS)** | Windows 환경 | Windows 10/11 | PowerShell 5.1 / 7.x 기준 검증 |
+| **형상 관리 (Git)**| `2.x` 이상 | `2.55.0.windows.5` | 원격 저장소(`origin/main`) 푸시 및 커밋 해시 추적 |
+| **고정 의존성** | `@supabase/supabase-js: 2.117.2`, `jose: 6.2.12` | `package-lock.json` 고정 버전 일치 |
+
+---
+
+
 이 저장소는 1단계에서 학생 본인이 GitHub 저장소와 Vercel 배포를 만드는 출발점입니다. 포함된 메모 네 건은 가상 자료입니다. 실제 학생 자료, 토큰, 비밀키를 넣지 마세요.
 
 ## 학생이 하는 일: 세 걸음
@@ -421,7 +452,8 @@
     * 브라우저 로컬(`http://localhost:3000`) 및 공개 배포 주소(`https://choi-bujang-secret-vault-evun.vercel.app`) 명시
   * **시스템 아키텍처 다이어그램 및 실제 데이터 흐름 기술**:
     * 브라우저 → 서버리스 API(`api/`) → 외부 서비스(Supabase REST API 직접 호출, 외부 AI 게이트웨이 직접 실측)의 실제 데이터 흐름을 Mermaid, ASCII, 표로 다중 작성
-    * `api/notes/*`는 판정기 호출 없이 Supabase 직접 요청 및 소유자(`owner_id`) 격리 수행, `api/notes/restore.js`는 선택적 인증 및 사본 해시 검증 후 DB 통신 실패 여부와 무관하게 200 성공을 반환함을 명시
+    * `api/notes/*`는 판정기 호출 없이 Supabase 직접 요청 및 소유자(`owner_id`) 격리 수행
+    * `api/notes/restore.js`는 선택적 인증(`Authorization` 헤더 존재 시에만 검증)을 지원하며, 저장 파일에 없는 ID라도 요청 본문에 유효한 사본(`content`, `owner_id`, `contentHash` 일치)이 포함되면 복구 대상으로 인정함. 사본 검증 통과 후 DB 통신 실패 여부와 무관하게(에러 무시) 200 성공(`success: true`)을 반환하는 특성을 명시
     * `api/device/verify.js`는 자체 승인 응답 반환, `api/events.js`는 정적 배열 반환, `api/ai/explain.js`는 고정 요약 템플릿 반환 등 실제 코드 동작과 100% 일치시킴
     * 독립 시뮬레이션 엔진(`src/decider.mjs`, `src/detect.mjs`, `src/policy-manager.mjs`)은 웹 API 미들웨어가 아닌 로컬 테스트 모듈로 명확히 분리
     * 실제 파일 경로 및 공개 주소만 기술하고 비밀 설정값(토큰, API 키)은 전면 배제
@@ -429,7 +461,7 @@
     * 제공 코드 경계: `public/app.js` (기본 UI 로직), `api/events.js`, `api/ops/summary.js`, `api/notices/`, `docs/DECIDER_REQUEST.md`, `docs/DETECT_EVENTS.md`, `scripts/`
     * 학생 작성/수정 코드: `public/index.html` (학생 접속 앱 보완), `student/extension.mjs`, `api/_auth.js`, `api/auth.js`, `api/notes/`, `api/device/verify.js`, `api/ai/`, `src/`, `docs/STUDENT_RUNBOOK.md`, `package.json`
     * 직접 실측 완료된 65개 단위 테스트 및 검증 스크립트와 미확인 항목(심판 서버 실시간 연동, 사내망 mTLS 연동 등) 명시
-    * 오류별(404: 사본/자원 부재, 403: 소유자/자료구역 불일치, 400: 해시불일치/기기식별자/제목누락, 401: 토큰 누락/만료 등) 실제 소스코드 원인과 점검 순서 정리
+    * 오류별(404: 사본 파일 및 본문 사본 모두 부재 시, 403: 소유자/자료구역 불일치, 400: 해시불일치/기기식별자/제목누락, 200: 사본 검증 성공 및 DB 실패 무시) 실제 소스코드 원인과 점검 순서 정리
 * **다시 실행하는 방법**:
   * [docs/STUDENT_RUNBOOK.md](docs/STUDENT_RUNBOOK.md) 문서 참조
   * 로컬 개발 서버 구동:

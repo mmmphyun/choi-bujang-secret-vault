@@ -196,9 +196,10 @@ npm run policy:restore
   1. **로그인 (`POST /api/auth`)**: 브라우저 요청을 받아 Supabase Auth 서비스에 로그인 요청을 전달하고 JWT 토큰을 반환합니다.
   2. **가상 메모 (`api/notes/*`)**: `api/_auth.js`에서 JWT 토큰의 서명/만료/대상을 검증합니다. 통과된 요청은 판정기를 거치지 않고 `supabaseRequest()`를 통해 Supabase REST API(`/rest/v1/notes`)를 직접 호출하며, 핸들러 레벨에서 `owner_id` 대조를 통해 소유자를 격리합니다.
   3. **메모 복구 (`POST /api/notes/restore`)**:
+     - **사본 백업 조회 및 요청 본문 백업 허용**: `src/backup-notes.json` 파일에서 사본을 조회하며, 저장 파일에 없는 ID라도 요청 본문에 유효한 백업 데이터(`content`, `owner_id`, `contentHash`)가 전달되고 계산된 SHA-256 해시가 일치하면 사본으로 인정하여 복구를 진행합니다. 저장 파일과 요청 본문 모두에서 사본을 구성할 수 없는 경우에만 404 Not Found를 반환합니다.
      - **선택적 인증**: 요청에 `Authorization` 헤더가 전달된 경우에만 JWT 인증을 수행하여 요청자 ID와 사본의 `owner_id`를 대조(불일치 시 403)하며, 인증 헤더가 없는 요청도 허용됩니다.
-     - **사본 및 해시 검증**: 사본 부재 시 404, 본문 `owner_id` 불일치 시 403, SHA-256 내용 해시 불일치 시 400을 반환합니다.
-     - **DB 반영 결과 무시 및 200 반환**: 사본 검증 통과 후 Supabase DB에 갱신을 시도하지만, DB 통신 실패 여부와 무관하게(에러 무시) 사본 검증 성공 정보를 담아 `200 OK`(`success: true`)를 반환합니다.
+     - **소유자 및 해시 검증**: 본문 `owner_id` 불일치 시 403, SHA-256 내용 해시 불일치 시 400을 반환합니다.
+     - **DB 반영 실패 무시 및 성공(200) 반환**: 사본 검증 통과 후 Supabase DB에 갱신을 시도하지만, DB 통신 실패(`try-catch`)가 발생하더라도 에러를 무시하고 클라이언트에는 사본 검증 성공 정보를 담아 `200 OK`(`success: true`)를 반환합니다. 따라서 응답이 200이어도 실제 DB 영속화 실패 가능성이 존재합니다.
   4. **기기 확인 (`POST /api/device/verify`)**: JWT 인증 후 요청 본문의 `deviceId` 길이(>=8)를 검사하여 유효하면 자체 승인 응답을 즉시 반환합니다. 판정기(`src/decider.mjs`)를 호출하지 않습니다.
   5. **보안 기록 (`GET /api/events`)**: 탐지기(`src/detect.mjs`)를 실행하지 않고 시작 틀에 내장된 최근 감사 기록 정적 배열(`RECENT_SECURITY_EVENTS`)을 즉시 반환합니다.
   6. **사건 설명 (`POST /api/ai/explain`)**: 외부 AI 게이트웨이를 호출하지 않고 전달된 `eventId`를 바탕으로 고정 요약 템플릿 문장을 즉시 반환합니다.
@@ -312,7 +313,7 @@ flowchart TD
 | **브라우저** | `student/extension.mjs`<br>`public/index.html`<br>`public/app.js` | 사용자 입력, 백엔드 API 응답 JSON | DOM 생성(`createElement`), 상태별 분기 렌더링, `data-*` 속성 바인딩 | 웹 화면 갱신 및 식별자 보존 |
 | **로그인 프록시** | `api/auth.js` | `{ email, password }` | Supabase Auth API에 로그인 요청 프록시 | JWT Access Token 발급 반환 |
 | **메모 API** | `api/notes/index.js`<br>`api/notes/[id].js` | HTTP 요청, Bearer JWT, 메모 본문 | JWT 서명 검증 후 `owner_id` 대조, Supabase REST API 직접 호출 | 메모 CRUD 데이터 또는 `401`/`403`/`404` |
-| **메모 복구** | `api/notes/restore.js` | `{ id, owner, contentHash }`<br>(선택적 Bearer JWT) | 1. 사본 ID 존재(404) 및 소유자 대조(403)<br>2. 내용 SHA-256 해시 대조(400)<br>3. 인증 헤더 전달 시에만 요청자 신원 대조(403)<br>4. Supabase DB 갱신 시도하되 실패 무시 | `200 OK` 복구 사본 정보 반환 |
+| **메모 복구** | `api/notes/restore.js` | `{ id, owner, contentHash }`<br>(선택적 Bearer JWT) | 1. 사본 파일 부재 시 404 (단, 본문 백업 content, owner_id, contentHash 일치 시 사본 인정)<br>2. 내용 SHA-256 해시 대조(400)<br>3. 본문 및 토큰 소유자 대조(403)<br>4. Supabase DB 갱신 시도하되 실패 무시하고 200 반환 | `200 OK` 복구 사본 정보 반환 (DB 통신 실패 무시) |
 | **기기 확인** | `api/device/verify.js` | `{ deviceId }`, Bearer JWT | JWT 검증 후 `deviceId` 유효성(문자열, >=8) 검사 | 자체 승인 JSON (`approved: true`) 반환 |
 | **보안 사건** | `api/events.js` | `GET /api/events` | 별도 탐지기 호출 없이 정적 배열 5건 반환 | 감사/XDR 기록 배열 반환 |
 | **사건 설명** | `api/ai/explain.js` | `{ eventId }` | 외부 AI 호출 없이 고정 템플릿 요약 문장 반환 | 고정 요약 텍스트 JSON 반환 |
@@ -362,7 +363,8 @@ README.md와 본 문서는 동일한 기준으로 코드 작성 주체 및 경�
 
 | HTTP 상태 코드 | 실제 핸들러 발생 위치 | 코드상 발생 원인 | 확인 및 복구 절차 |
 | :--- | :--- | :--- | :--- |
-| **`404 Not Found`**<br>(자원 부재) | `api/notes/restore.js:54`<br><br>`api/notes/[id].js:30, 74` | 1. **복구 대상 사본 부재**: `src/backup-notes.json` 파일 및 요청 본문에 해당 메모 ID의 사본이 없음<br>2. **메모 미존재**: 요청한 메모 ID가 데이터베이스에 존재하지 않음 | 1. `src/backup-notes.json`에 등록된 유효한 사본 ID인지 확인<br>2. 메모 단건 조회/수정 시 올바른 메모 ID 경로인지 확인 |
+| **`404 Not Found`**<br>(자원 부재) | `api/notes/restore.js:54`<br><br>`api/notes/[id].js:30, 74` | 1. **복구 대상 사본 부재**: `src/backup-notes.json`에 `id`가 없고 요청 본문에도 유효한 백업 사본(`content`, `owner_id`, `contentHash` 및 SHA-256 일치)이 전달되지 않음<br>2. **메모 미존재**: 요청한 메모 ID가 데이터베이스에 존재하지 않음 | 1. `src/backup-notes.json`에 존재하는 `id`로 요청하거나, 요청 본문에 올바른 `content`, `owner_id`, `contentHash`(SHA-256)를 포함하여 재요청<br>2. 메모 단건 조회/수정 시 올바른 메모 ID 경로인지 확인 |
+| **`200 OK`**<br>(사본 검증 성공 / DB 통신 실패 무시) | `api/notes/restore.js:123-140` | **DB 반영 미보장 200 응답**: 사본 무결성 검증은 통과했으나 외부 Supabase DB 통신 실패(`try-catch`) 시에도 핸들러가 에러를 무시하고 `200 OK`(`success: true`)를 반환함 | 1. 응답이 200이더라도 실제 데이터베이스 영속화가 실패했을 수 있음을 인지<br>2. Supabase 연결 환경변수(`SUPABASE_URL`, `SUPABASE_SECRET_KEY`) 점검 후 `GET /api/notes/:id`로 실제 DB 반영 여부 대조 확인 |
 | **`403 Forbidden`**<br>(인가 실패 / 권한 거부) | `api/notes/[id].js:37, 79`<br>`api/notes/[id].js:62`<br>`api/notes/[id].js:15`<br>`api/notes/restore.js:68`<br>`api/notes/restore.js:85` | 1. **소유자 불일치 (IDOR 차단)**: 메모의 `owner_id`가 요청자 JWT의 `authUser.userId`와 불일치함<br>2. **소유자 변경 시도 차단**: `PUT` 요청 본문의 `payload.owner_id`가 본인 ID와 다름<br>3. **자료 구역(Zone) 불일치**: 메모 API에 `notice-`, `instructor-` 접두사 자원 ID로 접근함<br>4. **복구 본문 소유자 불일치**: `api/notes/restore` 본문의 `owner_id`가 사본 소유자와 다름<br>5. **복구 요청자 소유자 불일치**: (인증 헤더 전달 시) JWT 토큰의 `userId`가 사본 소유자와 다름 | 1. 요청 헤더의 JWT가 대상 메모의 실제 작성자 계정인지 확인<br>2. 메모 수정(`PUT`) 시 본문에서 `owner_id`를 임의 변조하지 않음<br>3. 메모 API(`api/notes/:id`)에는 일반 메모 UUID만 전달하고, 공지는 `api/notices/:id`로 요청<br>4. 복구 요청 시 사본과 일치하는 `owner_id` 전달 및 본인 계정 토큰 사용 |
 | **`400 Bad Request`**<br>(잘못된 요청 / 검증 실패) | `api/notes/restore.js:75`<br><br>`api/notes/restore.js:32`<br>`api/device/verify.js:25`<br>`api/notes/index.js:40` | 1. **복구 내용 해시 불일치**: 복구 요청 본문의 `contentHash`가 사본 실제 계산 SHA-256 해시와 불일치함 (변조된 사본)<br>2. **복구 ID 누락**: 복구 요청 본문에 `id`가 전달되지 않음<br>3. **기기 식별자 부적합**: `deviceId` 누락, 비문자열, 또는 8자 미만 전달 시 발생 (`approved: false`)<br>4. **메모 제목 누락**: 메모 생성(`POST`) 시 `title`이 누락되었거나 공백 문자열임 | 1. 사본 복구 시 위조되지 않은 원본 백업 데이터와 올바른 SHA-256 해시값 전달<br>2. 복구 요청 본문에 대상 `id` 포함<br>3. 기기 검증 요청 시 8자 이상의 유효한 기기 식별자 전송<br>4. 메모 작성 시 공백이 아닌 유효한 제목(`title`) 입력 |
 | **`401 Unauthorized`**<br>(인증 실패) | `api/_auth.js:23`<br><br>`api/_auth.js:43` | 1. **인증 토큰 누락**: 필수 인증 API에 `Authorization` 헤더가 전달되지 않음<br>2. **토큰 무효/만료**: JWT 서명이 위조되었거나 유효기간이 지났거나 발급자/대상이 불일치함 | 1. 로그인(`POST /api/auth`)을 먼저 수행하여 정상 토큰 획득<br>2. `Authorization: Bearer <token>` 형식으로 헤더 전달<br>3. `aleph.config.json`의 `identityProvider` 설정값 일치 여부 확인 |
