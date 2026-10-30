@@ -421,14 +421,15 @@
     * 브라우저 로컬(`http://localhost:3000`) 및 공개 배포 주소(`https://choi-bujang-secret-vault-evun.vercel.app`) 명시
   * **시스템 아키텍처 다이어그램 및 실제 데이터 흐름 기술**:
     * 브라우저 → 서버리스 API(`api/`) → 외부 서비스(Supabase REST API 직접 호출, 외부 AI 게이트웨이 직접 실측)의 실제 데이터 흐름을 Mermaid, ASCII, 표로 다중 작성
-    * `api/notes/*`는 판정기 호출 없이 Supabase 직접 요청 및 소유자(`owner_id`) 격리 수행, `api/device/verify.js`는 자체 승인 응답 반환, `api/events.js`는 정적 배열 반환, `api/ai/explain.js`는 고정 요약 템플릿 반환 등 실제 코드 동작과 100% 일치시킴
+    * `api/notes/*`는 판정기 호출 없이 Supabase 직접 요청 및 소유자(`owner_id`) 격리 수행, `api/notes/restore.js`는 선택적 인증 및 사본 해시 검증 후 DB 통신 실패 여부와 무관하게 200 성공을 반환함을 명시
+    * `api/device/verify.js`는 자체 승인 응답 반환, `api/events.js`는 정적 배열 반환, `api/ai/explain.js`는 고정 요약 템플릿 반환 등 실제 코드 동작과 100% 일치시킴
     * 독립 시뮬레이션 엔진(`src/decider.mjs`, `src/detect.mjs`, `src/policy-manager.mjs`)은 웹 API 미들웨어가 아닌 로컬 테스트 모듈로 명확히 분리
     * 실제 파일 경로 및 공개 주소만 기술하고 비밀 설정값(토큰, API 키)은 전면 배제
   * **기능 경계 및 검증 상태 구분 (일원화)**:
-    * 제공 코드 경계: `public/index.html`, `public/app.js`, `api/events.js`, `api/ops/summary.js`, `api/notices/`, `docs/DECIDER_REQUEST.md`, `docs/DETECT_EVENTS.md`, `scripts/`
-    * 학생 작성/수정 코드: `student/extension.mjs`, `api/_auth.js`, `api/auth.js`, `api/notes/`, `api/device/verify.js`, `api/ai/`, `src/`, `docs/STUDENT_RUNBOOK.md`, `package.json`
+    * 제공 코드 경계: `public/app.js` (기본 UI 로직), `api/events.js`, `api/ops/summary.js`, `api/notices/`, `docs/DECIDER_REQUEST.md`, `docs/DETECT_EVENTS.md`, `scripts/`
+    * 학생 작성/수정 코드: `public/index.html` (학생 접속 앱 보완), `student/extension.mjs`, `api/_auth.js`, `api/auth.js`, `api/notes/`, `api/device/verify.js`, `api/ai/`, `src/`, `docs/STUDENT_RUNBOOK.md`, `package.json`
     * 직접 실측 완료된 65개 단위 테스트 및 검증 스크립트와 미확인 항목(심판 서버 실시간 연동, 사내망 mTLS 연동 등) 명시
-    * 오류별(403: 소유자/자료구역 불일치, 400: 기기식별자/제목누락/해시불일치, 401: 토큰 누락/만료 등) 실제 소스코드 원인과 점검 순서 정리
+    * 오류별(404: 사본/자원 부재, 403: 소유자/자료구역 불일치, 400: 해시불일치/기기식별자/제목누락, 401: 토큰 누락/만료 등) 실제 소스코드 원인과 점검 순서 정리
 * **다시 실행하는 방법**:
   * [docs/STUDENT_RUNBOOK.md](docs/STUDENT_RUNBOOK.md) 문서 참조
   * 로컬 개발 서버 구동:

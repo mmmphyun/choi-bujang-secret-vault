@@ -36,7 +36,7 @@ aleph-defense/
 │   ├── notes/                # 가상 메모 엔드포인트
 │   │   ├── index.js          # 메모 목록 조회(GET) 및 생성(POST) (Supabase 직접 통신) (학생 작성)
 │   │   ├── [id].js           # 단건 조회, 수정, 삭제 (소유자 및 자원 구역 격리) (학생 작성)
-│   │   └── restore.js        # 메모 사본 SHA-256 무결성 검증 및 단건 복구 (학생 작성)
+│   │   └── restore.js        # 메모 사본 검증 및 단건 복구 (선택적 인증/해시 검증) (학생 작성)
 │   ├── notices/              # 공지사항 조회 엔드포인트 (GET /api/notices) (제공 시작 틀)
 │   └── ops/                  # 작전실 현황 요약 엔드포인트 (GET /api/ops/summary) (제공 시작 틀)
 ├── docs/                     # 시스템 문서
@@ -44,8 +44,8 @@ aleph-defense/
 │   ├── DETECT_EVENTS.md      # 9~10단계 이상 탐지 엔진 사건 규격 (제공 문서)
 │   └── STUDENT_RUNBOOK.md    # [본 문서] 21단계 학생용 실행 설명서 및 시스템 구성도 (학생 작성)
 ├── public/                   # 정적 웹 프론트엔드 계층
+│   ├── index.html            # 브라우저 UI 마크업 및 작전실 대시보드 (제공 시작 틀 기반 학생 보완)
 │   ├── app.js                # 웹 애플리케이션 진입점 및 API 비동기 통신 클라이언트 (제공 코드)
-│   ├── index.html            # 브라우저 UI 마크업 (제공 코드)
 │   └── aleph.json            # 배포 메타데이터 (빌드 시 생성)
 ├── scripts/                  # 빌드, 검증, 번들링 및 복구 스크립트
 │   ├── build-public.mjs      # 정적 빌드 스크립트 (`npm run build`) (제공 코드)
@@ -60,6 +60,7 @@ aleph-defense/
 │   ├── detect.mjs            # 이상 접속 및 폭주 조회 탐지기 (`detectEvents`) (학생 구현)
 │   ├── policy-manager.mjs    # 보안 정책 무결성 검증 및 복원 모듈 (학생 구현)
 │   ├── verify-login.mjs      # JWT 서명/만료/대상 검증 모듈 (학생 구현)
+│   ├── backup-notes.json     # 비공개 가상 메모 안전 복원 사본 파일
 │   ├── policy-active.json    # 현재 활성 정책 파일
 │   └── policy-backup.json    # 안전 기준 백업 정책 파일
 ├── student/                  # 학생 확장 UI 렌더링 계층
@@ -194,25 +195,29 @@ npm run policy:restore
 * **실제 핸들러 동작 요약**:
   1. **로그인 (`POST /api/auth`)**: 브라우저 요청을 받아 Supabase Auth 서비스에 로그인 요청을 전달하고 JWT 토큰을 반환합니다.
   2. **가상 메모 (`api/notes/*`)**: `api/_auth.js`에서 JWT 토큰의 서명/만료/대상을 검증합니다. 통과된 요청은 판정기를 거치지 않고 `supabaseRequest()`를 통해 Supabase REST API(`/rest/v1/notes`)를 직접 호출하며, 핸들러 레벨에서 `owner_id` 대조를 통해 소유자를 격리합니다.
-  3. **기기 확인 (`POST /api/device/verify`)**: JWT 인증 후 요청 본문의 `deviceId` 길이(>=8)를 검사하여 유효하면 자체 승인 응답을 즉시 반환합니다.
-  4. **보안 기록 (`GET /api/events`)**: 탐지기를 실행하지 않고 시작 틀에 내장된 최근 감사 기록 정적 배열(`RECENT_SECURITY_EVENTS`)을 즉시 반환합니다.
-  5. **사건 설명 (`POST /api/ai/explain`)**: 외부 AI 게이트웨이를 호출하지 않고 전달된 `eventId`를 바탕으로 고정 요약 템플릿 문장을 즉시 반환합니다.
-  6. **AI 연결 점검 (`GET /api/ai/connection`)**: 외부 AI 게이트웨이(`https://aleph-judge-production.up.railway.app/defense/ai/connection`)로 직접 HTTP 요청을 보내 전송 상태 및 권한을 실측합니다.
-  7. **보안 정책 및 탐지 엔진 (`src/`)**: 웹 API의 요청 처리 경로에 배치되지 않으며, `npm run decider:test`, `npm run detect:test` 등의 독립 검증 스크립트에 의해 가상 시나리오를 검증하는 모듈로 분리되어 있습니다.
+  3. **메모 복구 (`POST /api/notes/restore`)**:
+     - **선택적 인증**: 요청에 `Authorization` 헤더가 전달된 경우에만 JWT 인증을 수행하여 요청자 ID와 사본의 `owner_id`를 대조(불일치 시 403)하며, 인증 헤더가 없는 요청도 허용됩니다.
+     - **사본 및 해시 검증**: 사본 부재 시 404, 본문 `owner_id` 불일치 시 403, SHA-256 내용 해시 불일치 시 400을 반환합니다.
+     - **DB 반영 결과 무시 및 200 반환**: 사본 검증 통과 후 Supabase DB에 갱신을 시도하지만, DB 통신 실패 여부와 무관하게(에러 무시) 사본 검증 성공 정보를 담아 `200 OK`(`success: true`)를 반환합니다.
+  4. **기기 확인 (`POST /api/device/verify`)**: JWT 인증 후 요청 본문의 `deviceId` 길이(>=8)를 검사하여 유효하면 자체 승인 응답을 즉시 반환합니다. 판정기(`src/decider.mjs`)를 호출하지 않습니다.
+  5. **보안 기록 (`GET /api/events`)**: 탐지기(`src/detect.mjs`)를 실행하지 않고 시작 틀에 내장된 최근 감사 기록 정적 배열(`RECENT_SECURITY_EVENTS`)을 즉시 반환합니다.
+  6. **사건 설명 (`POST /api/ai/explain`)**: 외부 AI 게이트웨이를 호출하지 않고 전달된 `eventId`를 바탕으로 고정 요약 템플릿 문장을 즉시 반환합니다.
+  7. **AI 연결 점검 (`GET /api/ai/connection`)**: 외부 AI 게이트웨이(`https://aleph-judge-production.up.railway.app/defense/ai/connection`)로 직접 HTTP 요청을 보내 전송 상태 및 권한을 실측합니다.
+  8. **보안 정책 및 탐지 엔진 (`src/`)**: 웹 API의 요청 처리 경로에 배치되지 않으며, `npm run decider:test`, `npm run detect:test` 등의 독립 검증 스크립트에 의해 가상 시나리오를 검증하는 모듈로 분리되어 있습니다.
 
 ### 5.2 텍스트 기반 구성도 (ASCII)
 ```
 +---------------------------------------------------------------------------------------------------------+
 |                                           1. 브라우저 계층                                              |
 |   +---------------------------------------------+   +-----------------------------------------------+   |
-|   |         public/index.html                   |   |         student/extension.mjs                 |   |
-|   |         public/app.js                       |   |  - renderStatus, renderEvents                 |   |
+|   |   public/index.html (학생 접속 앱 보완)     |   |         student/extension.mjs                 |   |
+|   |   public/app.js (제공 클라이언트 로직)      |   |  - renderStatus, renderEvents                 |   |
 |   |  - 화면 렌더링 및 사용자 이벤트 처리       |   |  - renderAiConnection, renderExplanation      |   |
 |   |  - fetch 비동기 통신 (Authorization Bearer) |   |  - renderAction, renderVulnerabilities        |   |
 |   +---------------------------------------------+   +-----------------------------------------------+   |
 +----------------------------------------------------+----------------------------------------------------+
                                                      |
-                                                     | HTTPS / JSON (Bearer Token)
+                                                     | HTTPS / JSON (Bearer Token 선택/필수)
                                                      v
 +---------------------------------------------------------------------------------------------------------+
 |                                     2. 앱 서버 계층 (api/ 서버리스 함수)                                |
@@ -224,7 +229,7 @@ npm run policy:restore
 |   | 엔드포인트 실제 처리 동작:                                                                      |   |
 |   | - POST /api/auth          : Supabase Auth 로그인 요청 프록시                                    |   |
 |   | - GET/PUT/DEL /api/notes/*: JWT 검증 후 Supabase REST API 직접 호출 (소유자 owner_id 격리)       |   |
-|   | - POST /api/notes/restore : ID·소유자·SHA-256 해시 검증 후 Supabase 직접 갱신                  |   |
+|   | - POST /api/notes/restore : 선택적 인증, 사본 해시 검증 후 Supabase 시도 (DB 실패 무시 200 반환)|   |
 |   | - POST /api/device/verify : JWT 검증 후 deviceId 길이 검사 -> 자체 승인 JSON 반환 (판정기 미연결)|  |
 |   | - GET /api/events         : 정적 사건 배열(RECENT_SECURITY_EVENTS) 반환 (탐지기 미연결)         |   |
 |   | - POST /api/ai/explain    : eventId 기반 고정 안내 템플릿 문장 반환 (AI 게이트웨이 미연결)       |   |
@@ -248,6 +253,7 @@ npm run policy:restore
   - src/detect.mjs         : `npm run detect:test`에서 감사 로그 배열 대상 10분 슬라이딩 윈도우 폭주 탐지
   - src/policy-manager.mjs : `npm run policy:diff`, `policy:restore`에서 정책 해시 대조 및 복원
   - src/verify-login.mjs   : `api/_auth.js`에서 JWT 검증 시 재사용되는 신원 검증 모듈
+  - src/backup-notes.json  : `api/notes/restore.js`에서 조회되는 단건 메모 사본 파일
 ===========================================================================================================
 ```
 
@@ -255,7 +261,7 @@ npm run policy:restore
 ```mermaid
 flowchart TD
     subgraph Browser["1. 브라우저 계층"]
-        UI["기본 UI (public/app.js, index.html)"]
+        UI["기본 UI (public/index.html - 학생 보완, app.js - 제공)"]
         Ext["학생 확장 뷰 (student/extension.mjs)"]
         UI --- Ext
     end
@@ -264,7 +270,7 @@ flowchart TD
         AuthMiddleware["인증/프록시 모듈 (api/_auth.js)"]
         RouteAuth["POST /api/auth<br>(로그인 프록시)"]
         RouteNotes["/api/notes/*<br>(소유자 격리 CRUD)"]
-        RouteRestore["POST /api/notes/restore<br>(해시 검증 복구)"]
+        RouteRestore["POST /api/notes/restore<br>(선택적 인증, 해시 검증, DB 실패 무시 200)"]
         RouteDevice["POST /api/device/verify<br>(식별자 검사 자체 승인)"]
         RouteEvents["GET /api/events<br>(정적 사건 배열 반환)"]
         RouteAiExplain["POST /api/ai/explain<br>(고정 템플릿 문장 반환)"]
@@ -282,6 +288,7 @@ flowchart TD
         Detector["src/detect.mjs<br>(npm run detect:test)"]
         PolicyMgr["src/policy-manager.mjs<br>(npm run policy:diff)"]
         Verifier["src/verify-login.mjs<br>(JWT 검증 모듈)"]
+        BackupNotes["src/backup-notes.json<br>(메모 안전 사본)"]
     end
 
     UI -->|HTTPS / Bearer Token| AppServer
@@ -289,7 +296,9 @@ flowchart TD
     RouteAuth -->|Proxy| SupabaseAuth
     RouteNotes --> AuthMiddleware
     RouteNotes -->|supabaseRequest() 직접 호출| SupabaseDB
-    RouteRestore -->|supabaseRequest() 직접 호출| SupabaseDB
+    RouteRestore -.->|선택적 토큰 검증 시| AuthMiddleware
+    RouteRestore -->|사본 조회| BackupNotes
+    RouteRestore -->|DB 반영 시도 (실패 무시)| SupabaseDB
     RouteAiConn -->|fetch 직접 점검| AiGateway
 
     %% 명시적 독립 관계 표현
@@ -300,10 +309,10 @@ flowchart TD
 ### 5.4 계층별 모듈 및 실제 데이터 흐름 표
 | 계층 | 대상 모듈/파일 | 입력 데이터 | 실제 처리 내용 | 출력/결과 |
 | :--- | :--- | :--- | :--- | :--- |
-| **브라우저** | `student/extension.mjs`<br>`public/app.js` | 사용자 입력, 백엔드 API 응답 JSON | DOM 생성(`createElement`), 상태별 분기 렌더링, `data-*` 속성 바인딩 | 웹 화면 갱신 및 식별자 보존 |
+| **브라우저** | `student/extension.mjs`<br>`public/index.html`<br>`public/app.js` | 사용자 입력, 백엔드 API 응답 JSON | DOM 생성(`createElement`), 상태별 분기 렌더링, `data-*` 속성 바인딩 | 웹 화면 갱신 및 식별자 보존 |
 | **로그인 프록시** | `api/auth.js` | `{ email, password }` | Supabase Auth API에 로그인 요청 프록시 | JWT Access Token 발급 반환 |
 | **메모 API** | `api/notes/index.js`<br>`api/notes/[id].js` | HTTP 요청, Bearer JWT, 메모 본문 | JWT 서명 검증 후 `owner_id` 대조, Supabase REST API 직접 호출 | 메모 CRUD 데이터 또는 `401`/`403`/`404` |
-| **메모 복구** | `api/notes/restore.js` | `{ id, owner, contentHash }` | 백업 메모의 SHA-256 해시 검증 후 Supabase 단건 복구 | `200 OK` 복구 완료 응답 |
+| **메모 복구** | `api/notes/restore.js` | `{ id, owner, contentHash }`<br>(선택적 Bearer JWT) | 1. 사본 ID 존재(404) 및 소유자 대조(403)<br>2. 내용 SHA-256 해시 대조(400)<br>3. 인증 헤더 전달 시에만 요청자 신원 대조(403)<br>4. Supabase DB 갱신 시도하되 실패 무시 | `200 OK` 복구 사본 정보 반환 |
 | **기기 확인** | `api/device/verify.js` | `{ deviceId }`, Bearer JWT | JWT 검증 후 `deviceId` 유효성(문자열, >=8) 검사 | 자체 승인 JSON (`approved: true`) 반환 |
 | **보안 사건** | `api/events.js` | `GET /api/events` | 별도 탐지기 호출 없이 정적 배열 5건 반환 | 감사/XDR 기록 배열 반환 |
 | **사건 설명** | `api/ai/explain.js` | `{ eventId }` | 외부 AI 호출 없이 고정 템플릿 요약 문장 반환 | 고정 요약 텍스트 JSON 반환 |
@@ -320,12 +329,12 @@ README.md와 본 문서는 동일한 기준으로 코드 작성 주체 및 경�
 
 | 구분 | 컴포넌트 / 디렉터리 | 파일명 | 설명 |
 | :--- | :--- | :--- | :--- |
-| **운영 측 제공 코드**<br>(수정 금지) | **UI 기본 틀** | `public/index.html`<br>`public/app.js` | 웹 UI 레이아웃 및 기본 이벤트 리스너 |
+| **운영 측 제공 코드**<br>(수정 금지) | **UI 기본 로직** | `public/app.js` | 웹 UI 기본 이벤트 리스너 및 API 비동기 통신 클라이언트 |
 | | **제공 시작 틀 API** | `api/events.js`<br>`api/ops/summary.js`<br>`api/notices/` | 기본 감사 기록 목 데이터 및 운영 요약 엔드포인트 |
 | | **검증/번들 스크립트** | `scripts/build-public.mjs`<br>`scripts/bundle.mjs`<br>`scripts/decider-test.mjs`<br>`scripts/detect-test.mjs`<br>`scripts/fixture-7.mjs`<br>`scripts/policy-diff.mjs`<br>`scripts/policy-restore.mjs` | 정적 빌드, 제출 묶음 생성, 시뮬레이션 시험 러너 |
 | | **공식 규격 문서** | `docs/DECIDER_REQUEST.md`<br>`docs/DETECT_EVENTS.md` | 판정기 및 탐지기 계약 규격 문서 |
-| **학생 작성/수정 코드**<br>(1~21단계 누적) | **UI 확장 뷰** | `student/extension.mjs` | 13~20단계 프론트엔드 확장 렌더러 7종 (`createStudentView`, `renderStatus`, `renderEvents`, `renderAiConnection`, `renderExplanation`, `renderAction`, `renderVulnerabilities`) |
-| | **학생 자료실 API** | `api/_auth.js`<br>`api/auth.js`<br>`api/notes/index.js`<br>`api/notes/[id].js`<br>`api/notes/restore.js`<br>`api/device/verify.js`<br>`api/ai/connection.js`<br>`api/ai/explain.js` | 2~5단계 메모 CRUD 및 소유자 격리,<br>6단계 기기 식별자 검증,<br>11단계 사본 복구,<br>17~18단계 AI 연결 점검 및 설명 엔드포인트 |
+| **학생 작성/수정 코드**<br>(1~21단계 누적) | **학생 접속 앱 UI** | `public/index.html`<br>`student/extension.mjs` | 제공된 시작 틀 기본 마크업을 바탕으로 PWA 및 작전실 대시보드를 보완한 웹 화면, 13~20단계 프론트엔드 확장 렌더러 7종 |
+| | **학생 자료실 API** | `api/_auth.js`<br>`api/auth.js`<br>`api/notes/index.js`<br>`api/notes/[id].js`<br>`api/notes/restore.js`<br>`api/device/verify.js`<br>`api/ai/connection.js`<br>`api/ai/explain.js` | 2~5단계 메모 CRUD 및 소유자 격리,<br>6단계 기기 식별자 검증,<br>11단계 단건 사본 복구,<br>17~18단계 AI 연결 점검 및 설명 엔드포인트 |
 | | **독립 정책/보안 엔진** | `src/verify-login.mjs`<br>`src/decider.mjs`<br>`src/detect.mjs`<br>`src/policy-manager.mjs` | 3단계 JWT 서명 검증,<br>6~8단계 접근 제어 판정 규칙,<br>9~10단계 슬라이딩 윈도우 이상 탐지,<br>11단계 정책 복원 모듈 |
 | | **학생 문서 및 설정** | `docs/STUDENT_RUNBOOK.md`<br>`package.json` | 21단계 실행 설명서 및 아키텍처 문서,<br>로컬 개발 서버 구동 스크립트 |
 
@@ -353,9 +362,10 @@ README.md와 본 문서는 동일한 기준으로 코드 작성 주체 및 경�
 
 | HTTP 상태 코드 | 실제 핸들러 발생 위치 | 코드상 발생 원인 | 확인 및 복구 절차 |
 | :--- | :--- | :--- | :--- |
-| **`403 Forbidden`**<br>(인가 실패 / 권한 거부) | `api/notes/[id].js:37, 79`<br><br>`api/notes/[id].js:62`<br><br>`api/notes/[id].js:15` | 1. **소유자 불일치 (IDOR 차단)**: 메모의 `owner_id`가 요청자 JWT의 `authUser.userId`와 불일치함<br>2. **소유자 변경 시도 차단**: `PUT` 요청 본문의 `payload.owner_id`가 본인 ID와 다름<br>3. **자료 구역(Zone) 불일치**: 메모 API에 `notice-`, `instructor-` 접두사 자원 ID로 접근함 | 1. 요청 헤더의 JWT가 대상 메모의 실제 작성자 계정인지 확인<br>2. 메모 수정(`PUT`) 시 본문에서 `owner_id`를 임의 변조하지 않음<br>3. 메모 API(`api/notes/:id`)에는 일반 메모 UUID만 전달하고, 공지는 `api/notices/:id`로 요청 |
-| **`400 Bad Request`**<br>(잘못된 요청 / 검증 실패) | `api/device/verify.js:25`<br><br>`api/notes/index.js:40`<br><br>`api/notes/restore.js` | 1. **기기 식별자 부적합**: `deviceId` 누락, 비문자열, 또는 8자 미만 전달 시 발생 (`approved: false`)<br>2. **메모 제목 누락**: 메모 생성(`POST`) 시 `title`이 누락되었거나 공백 문자열임<br>3. **사본 무결성 검증 실패**: 메모 복구 시 사본 ID, 소유자 ID, 또는 SHA-256 내용 해시가 일치하지 않음 | 1. 기기 검증 요청 시 8자 이상의 유효한 기기 식별자 전송<br>2. 메모 작성 시 공백이 아닌 유효한 제목(`title`) 입력<br>3. 사본 복구 시 위조되지 않은 원본 백업 데이터와 SHA-256 해시값 전달 |
-| **`401 Unauthorized`**<br>(인증 실패) | `api/_auth.js:23`<br><br>`api/_auth.js:43` | 1. **인증 토큰 누락**: `Authorization` 헤더가 전달되지 않음<br>2. **토큰 무효/만료**: JWT 서명이 위조되었거나 유효기간이 지났거나 발급자/대상이 불일치함 | 1. 로그인(`POST /api/auth`)을 먼저 수행하여 정상 토큰 획득<br>2. `Authorization: Bearer <token>` 형식으로 헤더 전달<br>3. `aleph.config.json`의 `identityProvider` 설정값 일치 여부 확인 |
-| **`405 Method Not Allowed`**<br>(메소드 불허) | `api/device/verify.js:6`<br>`api/events.js:111`<br>`api/notes/index.js:75` | 1. `api/device/verify`에 GET 호출<br>2. `api/events`에 POST 호출<br>3. `api/notes`에 PUT/DELETE 호출 | 1. API 명세에 규정된 올바른 HTTP 메서드(GET, POST, PUT, DELETE)로 요청 |
+| **`404 Not Found`**<br>(자원 부재) | `api/notes/restore.js:54`<br><br>`api/notes/[id].js:30, 74` | 1. **복구 대상 사본 부재**: `src/backup-notes.json` 파일 및 요청 본문에 해당 메모 ID의 사본이 없음<br>2. **메모 미존재**: 요청한 메모 ID가 데이터베이스에 존재하지 않음 | 1. `src/backup-notes.json`에 등록된 유효한 사본 ID인지 확인<br>2. 메모 단건 조회/수정 시 올바른 메모 ID 경로인지 확인 |
+| **`403 Forbidden`**<br>(인가 실패 / 권한 거부) | `api/notes/[id].js:37, 79`<br>`api/notes/[id].js:62`<br>`api/notes/[id].js:15`<br>`api/notes/restore.js:68`<br>`api/notes/restore.js:85` | 1. **소유자 불일치 (IDOR 차단)**: 메모의 `owner_id`가 요청자 JWT의 `authUser.userId`와 불일치함<br>2. **소유자 변경 시도 차단**: `PUT` 요청 본문의 `payload.owner_id`가 본인 ID와 다름<br>3. **자료 구역(Zone) 불일치**: 메모 API에 `notice-`, `instructor-` 접두사 자원 ID로 접근함<br>4. **복구 본문 소유자 불일치**: `api/notes/restore` 본문의 `owner_id`가 사본 소유자와 다름<br>5. **복구 요청자 소유자 불일치**: (인증 헤더 전달 시) JWT 토큰의 `userId`가 사본 소유자와 다름 | 1. 요청 헤더의 JWT가 대상 메모의 실제 작성자 계정인지 확인<br>2. 메모 수정(`PUT`) 시 본문에서 `owner_id`를 임의 변조하지 않음<br>3. 메모 API(`api/notes/:id`)에는 일반 메모 UUID만 전달하고, 공지는 `api/notices/:id`로 요청<br>4. 복구 요청 시 사본과 일치하는 `owner_id` 전달 및 본인 계정 토큰 사용 |
+| **`400 Bad Request`**<br>(잘못된 요청 / 검증 실패) | `api/notes/restore.js:75`<br><br>`api/notes/restore.js:32`<br>`api/device/verify.js:25`<br>`api/notes/index.js:40` | 1. **복구 내용 해시 불일치**: 복구 요청 본문의 `contentHash`가 사본 실제 계산 SHA-256 해시와 불일치함 (변조된 사본)<br>2. **복구 ID 누락**: 복구 요청 본문에 `id`가 전달되지 않음<br>3. **기기 식별자 부적합**: `deviceId` 누락, 비문자열, 또는 8자 미만 전달 시 발생 (`approved: false`)<br>4. **메모 제목 누락**: 메모 생성(`POST`) 시 `title`이 누락되었거나 공백 문자열임 | 1. 사본 복구 시 위조되지 않은 원본 백업 데이터와 올바른 SHA-256 해시값 전달<br>2. 복구 요청 본문에 대상 `id` 포함<br>3. 기기 검증 요청 시 8자 이상의 유효한 기기 식별자 전송<br>4. 메모 작성 시 공백이 아닌 유효한 제목(`title`) 입력 |
+| **`401 Unauthorized`**<br>(인증 실패) | `api/_auth.js:23`<br><br>`api/_auth.js:43` | 1. **인증 토큰 누락**: 필수 인증 API에 `Authorization` 헤더가 전달되지 않음<br>2. **토큰 무효/만료**: JWT 서명이 위조되었거나 유효기간이 지났거나 발급자/대상이 불일치함 | 1. 로그인(`POST /api/auth`)을 먼저 수행하여 정상 토큰 획득<br>2. `Authorization: Bearer <token>` 형식으로 헤더 전달<br>3. `aleph.config.json`의 `identityProvider` 설정값 일치 여부 확인 |
+| **`405 Method Not Allowed`**<br>(메소드 불허) | `api/device/verify.js:6`<br>`api/events.js:111`<br>`api/notes/index.js:75`<br>`api/notes/restore.js:20` | 1. `api/device/verify`에 GET 호출<br>2. `api/events`에 POST 호출<br>3. `api/notes`에 PUT/DELETE 호출<br>4. `api/notes/restore`에 GET 호출 | 1. API 명세에 규정된 올바른 HTTP 메서드(GET, POST, PUT, DELETE)로 요청 |
 | **`503` / `AUTH_PENDING`**<br>(AI 연결 대기/실패) | `api/ai/connection.js:37, 51, 65` | 1. 외부 AI 게이트웨이 응답 시간 초과(`TIMEOUT`)<br>2. 게이트웨이 전송 점검(`transportChecked: true`) 미확인 또는 계정 권한 준비 중 | 1. 자동 재시도하지 않고 화면의 「다시 점검」 버튼을 수동으로 클릭<br>2. 게이트웨이 접속 환경변수(`AI_GATEWAY_URL`, `AI_GATEWAY_TOKEN`) 확인 |
 | **`시뮬레이션 거부`**<br>(판정기 가상 시나리오) | `src/decider.mjs` (`decide`) | `npm run decider:test` 실행 시 미등록 기기(`deviceRegistered: false`), 복합 이상 접속(`step_up`), 전체 목록 경로 요청에 대한 시뮬레이션 거부 | 1. 본 거부는 독립 시뮬레이션 시험의 정상 동작 결과임<br>2. `docs/DECIDER_REQUEST.md` 규칙 명세와 `src/decider.mjs`의 `RULE_IDS` 구현 대조 |
