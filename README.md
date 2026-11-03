@@ -201,7 +201,7 @@
 * **작동하는 기능**:
   * **안전 정책 사본 대조 및 diff 분석(`scripts/policy-diff.mjs`)**: 침해 전 검증된 안전 정책 사본(`src/policy-backup.json`)의 SHA-256 무결성 해시를 대조하여, 변조 여부를 검증하고 현재 시험 정책과의 변경 범위(diff)만 사전 출력합니다. 사본 부재 또는 해시 불일치 시 작업을 즉시 중단하며 실제 운영 정책은 건드리지 않습니다.
   * **안전 정책 복원 절차(`scripts/policy-restore.mjs`)**: 검증된 사본 버전으로 시험 정책을 안전하게 되돌립니다. 실행 전 바뀔 항목을 출력하며, 감사 이력과 타 서비스 규칙을 온전히 보존합니다. 정책 복원 후 계정 B의 계정 A 자료 요청은 다시 403 Forbidden으로 거부되고 계정 A의 정상 요청은 유지됩니다.
-  * **비공개 가상 메모 사본 단건 복원 POST 엔드포인트(`POST /api/notes/restore`)**: 사본 저장소(`src/backup-notes.json`)에서 지정된 한 건의 메모 ID, 소유자(`owner_id`), 내용 해시(`contentHash`)를 정밀 대조한 후 DB에 복원(UPSERT)합니다. 위조된 해시는 400 Bad Request, 소유자 불일치/타인 메모 복구 시도는 403 Forbidden으로 거부하며, 다른 메모와 감사 기록은 보존합니다.
+  * **비공개 가상 메모 사본 단건 복원 POST 엔드포인트(`POST /api/notes/restore`)**: 사본 저장소(`src/backup-notes.json`)뿐만 아니라 요청 본문에 포함된 백업 데이터(`content`, `owner_id`, `contentHash`)로도 사본을 구성합니다. `Authorization` 헤더가 전달된 경우에만 요청자 JWT의 소유자 대조(타인 메모 복구 시 403 Forbidden)를 수행하며, 헤더가 생략된 경우 본문 `owner_id`와 SHA-256 `contentHash` 일치 시 무인증 상태로 복원을 계속 진행합니다. 위조된 해시는 400 Bad Request, 본문 소유자 불일치는 403 Forbidden으로 거부하며, 외부 DB 통신 실패 시에도 사본 검증 성공 정보를 담아 200 OK를 반환합니다.
   * **설정 등록**: `aleph.config.json` 단계를 `step: 10`으로 올리고, `restoreRoute: "POST /api/notes/restore"` 및 `allowedRoutes`에 복구 경로를 등록했습니다.
 * **다시 실행하는 방법 (복구 뒤 1~9단계 정상·금지 요청 재시험 순서)**:
   1. 안전 정책 사본 diff 확인:
@@ -293,7 +293,7 @@
 
 * **작동하는 기능**:
   * **탈환 작전실 현황 요약(`GET /api/ops/summary`)**: 판정기 규칙(3종 활성), 탐지 사건 규칙(`burst_read`), 회수 상태(`propose_revocation`), 복구 버전(`v1.0.0` SHA-256 무결성 검증)의 메타데이터를 통합 제공합니다. 가상 메모 본문은 일절 포함하지 않으며 서버 응답 수치와 화면 표시가 완전히 일치합니다.
-  * **방어 실측 점검 및 41종 공격 대조표**: 1~11단계의 정상·금지 요청(정적 파일 메모 미노출, 비로그인 401 차단, 단건 IDOR 차단, 원본 DB 직접 접근 차단, 구역 격리, 위조 해시 복원 400 차단 등)을 실제 API로 실측하여 표로 렌더링합니다. 아직 실행하지 않은 총공세 41종 가상 침공 시험은 임의 통과 처리하지 않고 `미실행 (Pending)`으로 명확히 구분했습니다.
+  * **방어 대조표**: 브라우저에서 실행 가능한 API 실측 항목(정적 파일 메모 미노출, 비로그인 401 차단, 단건 IDOR 차단, 공지 구역 격리, 위조 해시 복원 400 차단 등)과 직접 네트워크 요청을 보내지 않는 항목(5단계 Supabase RLS, 6~7단계 SDP 판정기, 9단계 이상 탐지기)의 '직접 요청 안 함' 표시를 분리 렌더링합니다. 요청 실패 예외 발생 시 차단 통과로 왜곡하지 않고 '점검 실패'로 기록하며, 미실행 총공세 41종 시험도 '미실행 (Pending)'으로 명확히 구분합니다.
   * **설정 등록**: `aleph.config.json`의 단계를 `step: 12`로 갱신하고, `allowedRoutes`에 `GET /api/ops/summary`를 등록했습니다.
 
 * **출처 구분 (학생 몫 vs 제공 엔진)**:
@@ -346,7 +346,7 @@
        npm run policy:restore
        ```
      - 비공개 메모 단건 사본 복구:
-       - 사본 ID·소유자 ID·SHA-256 내용 해시가 일치하는 정상 페이로드로 `POST /api/notes/restore`를 호출하여 복구합니다. 위조된 해시는 400 Bad Request로 거부됩니다.
+       - 사본 ID·소유자 ID·SHA-256 내용 해시가 일치하는 정상 페이로드로 `POST /api/notes/restore`를 호출하여 복구합니다(저장소 파일 부재 시 본문 사본 데이터로 구성 가능). `Authorization` 헤더가 없으면 신원 확인 없이 진행되며, 위조된 해시는 400 Bad Request, 소유자 불일치는 403 Forbidden으로 거부됩니다.
 
 * **직접 확인할 것**:
   * 실제 API 결과와 작전실 화면 표시가 일치하는가?
@@ -495,7 +495,8 @@
     New-Item -ItemType Directory -Path ".\reproduction-verify" -Force
     Set-Location -Path ".\reproduction-verify"
     git clone https://github.com/mmmphyun/choi-bujang-secret-vault.git .
-    git checkout main
+    git checkout 5e42a895e1b20bbf4d69e5cefbc134c19e4e1711
+    git rev-parse HEAD
 
     # 2. 런타임 확인 및 환경변수 템플릿 준비
     node -v

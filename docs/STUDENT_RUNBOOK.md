@@ -392,7 +392,7 @@ README.md와 본 문서는 동일한 기준으로 코드 작성 주체 및 경�
 ### 8.1 형상 정보 및 기준 커밋
 * **원격 저장소 URL**: `https://github.com/mmmphyun/choi-bujang-secret-vault.git`
 * **대상 브랜치**: `main`
-* **기준 커밋 해시 (40자리)**: `c26b925a843fd6b715a14e10e5f69ad37f4da73f` (또는 최종 22단계 제출 커밋)
+* **기준 커밋 해시 (40자리)**: `5e42a895e1b20bbf4d69e5cefbc134c19e4e1711`
 * **보안 Agent 명칭**: `지지오`
 
 ### 8.2 격리된 새 폴더 재현 실행 절차 (단계별 명령어)
@@ -405,12 +405,12 @@ Set-Location -Path ".\reproduction-verify"
 # 2. 동일 커밋 소스코드 복제 (GitHub 원격 또는 원본 로컬 저장소에서 복제)
 # 방법 A: GitHub 원격 저장소에서 복제
 git clone https://github.com/mmmphyun/choi-bujang-secret-vault.git .
-git checkout main
+git checkout 5e42a895e1b20bbf4d69e5cefbc134c19e4e1711
 
 # 방법 B: 원본 로컬 저장소 디렉터리에서 복제 (오프라인 환경)
 # git clone <원본_저장소_루트_경로> .
 
-# 3. 커밋 해시 확인 (40자리 일치 여부 대조)
+# 3. 커밋 해시 확인 (단일 기준 커밋 5e42a895e1b20bbf4d69e5cefbc134c19e4e1711 일치 대조)
 git rev-parse HEAD
 
 # 4. 필수 런타임 버전 확인 (Node.js >=22, npm 최신, Git 2.x)

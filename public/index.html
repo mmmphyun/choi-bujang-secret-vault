@@ -584,7 +584,7 @@
       } catch {
         items.push({
           step: '1~2단계', category: '금지 요청 (기밀성)', desc: '정적 /data.json 내 가상 메모 본문 노출 차단',
-          apiResult: '연결 거부/미노출', reqId: generateReqId(), time: getIsoTime(), status: '거부 확인 (차단)', isPass: true
+          apiResult: '요청 실패 예외 발생', reqId: generateReqId(), time: getIsoTime(), status: '점검 실패 (네트워크 예외)', isPass: false
         });
       }
 
@@ -606,7 +606,7 @@
       } catch {
         items.push({
           step: '3단계', category: '금지 요청 (인증)', desc: '비로그인 사용자 메모 전체 목록 접근 차단',
-          apiResult: '요청 차단됨', reqId: generateReqId(), time: getIsoTime(), status: '거부 확인 (401 차단)', isPass: true
+          apiResult: '요청 실패 예외 발생', reqId: generateReqId(), time: getIsoTime(), status: '점검 실패 (네트워크 예외)', isPass: false
         });
       }
 
@@ -632,7 +632,7 @@
       } catch {
         items.push({
           step: '3단계', category: '금지 요청 (인증)', desc: '비로그인 사용자 메모 신규 작성 차단',
-          apiResult: '요청 차단됨', reqId: generateReqId(), time: getIsoTime(), status: '거부 확인 (401 차단)', isPass: true
+          apiResult: '요청 실패 예외 발생', reqId: generateReqId(), time: getIsoTime(), status: '점검 실패 (네트워크 예외)', isPass: false
         });
       }
 
@@ -654,7 +654,7 @@
       } catch {
         items.push({
           step: '4단계', category: '금지 요청 (IDOR/인가)', desc: '비로그인 단건 메모 GET/PUT/DELETE 차단',
-          apiResult: '요청 차단됨', reqId: generateReqId(), time: getIsoTime(), status: '거부 확인 (401 차단)', isPass: true
+          apiResult: '요청 실패 예외 발생', reqId: generateReqId(), time: getIsoTime(), status: '점검 실패 (네트워크 예외)', isPass: false
         });
       }
 
@@ -663,11 +663,11 @@
         step: '5단계',
         category: '금지 요청 (통제 일원화)',
         desc: '서버리스 프록시 우회 및 DB 직접 질의 차단',
-        apiResult: 'Supabase RLS 및 PUBLIC 권한 회수로 직접 조회 차단',
-        reqId: generateReqId(),
-        time: getIsoTime(),
-        status: '거부 확인 (차단)',
-        isPass: true
+        apiResult: '브라우저 직접 요청 없음 (Supabase RLS 및 DB 권한 통제 항목)',
+          reqId: '-',
+          time: '-',
+          status: '직접 요청 안 함 (설정 통제)',
+          isPass: null
       });
 
       // 6. 6~7단계: SDP 판정기 규칙 검증 (기기 등록/복합 이상)
@@ -675,11 +675,11 @@
         step: '6~7단계',
         category: '정상·금지 요청 (SDP 판정)',
         desc: '미등록 기기 거부(deny) 및 복합 이상 접속 재인증(step_up)',
-        apiResult: 'decide() 규칙 계약(device_registered, step_up_required) 검증 완료',
-        reqId: generateReqId(),
-        time: getIsoTime(),
-        status: '정상 승인/거부 확인',
-        isPass: true
+        apiResult: '브라우저 직접 요청 없음 (독립 decide() 로컬 시뮬레이션 항목)',
+          reqId: '-',
+          time: '-',
+          status: '직접 요청 안 함 (독립 엔진)',
+          isPass: null
       });
 
       // 7. 8단계: 공지 구역 읽기 정상 허용 및 공지 수정 거부 실측
@@ -705,7 +705,7 @@
       } catch {
         items.push({
           step: '8단계', category: '정상·금지 요청 (구역 분리)', desc: '공지 읽기 허용 및 공지 수정 거부',
-          apiResult: '구역 정책 검증 완료', reqId: generateReqId(), time: getIsoTime(), status: '허용 및 거부 확인', isPass: true
+          apiResult: '요청 실패 예외 발생', reqId: generateReqId(), time: getIsoTime(), status: '점검 실패 (네트워크 예외)', isPass: false
         });
       }
 
@@ -714,11 +714,11 @@
         step: '9단계',
         category: '금지 요청 (이상 탐지)',
         desc: '10분 내 121건 이상 단시간 대량 조회 시 propose_revocation',
-        apiResult: 'detect() 가상 사건 120건 observe / 121건 propose_revocation 검증',
-        reqId: generateReqId(),
-        time: getIsoTime(),
-        status: '회수 제안 확인',
-        isPass: true
+        apiResult: '브라우저 직접 요청 없음 (독립 detectEvents() 로컬 시뮬레이션 항목)',
+          reqId: '-',
+          time: '-',
+          status: '직접 요청 안 함 (독립 엔진)',
+          isPass: null
       });
 
       // 9. 10단계: 안전 정책 사본 무결성 대조 및 위조 해시 복원 거부 실측
@@ -747,7 +747,7 @@
       } catch {
         items.push({
           step: '10단계', category: '금지 요청 (사본 복원)', desc: '위조된 해시의 메모 복구 요청 거부',
-          apiResult: '요청 차단됨', reqId: generateReqId(), time: getIsoTime(), status: '거부 확인 (400 차단)', isPass: true
+          apiResult: '요청 실패 예외 발생', reqId: generateReqId(), time: getIsoTime(), status: '점검 실패 (네트워크 예외)', isPass: false
         });
       }
 
@@ -775,7 +775,7 @@
       } catch {
         items.push({
           step: '11단계', category: '정상·금지 요청 (접속 앱)', desc: 'standalone PWA 설정 및 비인증 기기 승인 거부',
-          apiResult: '기기 승인 검증 완료', reqId: generateReqId(), time: getIsoTime(), status: '허용 및 거부 확인', isPass: true
+          apiResult: '요청 실패 예외 발생', reqId: generateReqId(), time: getIsoTime(), status: '점검 실패 (네트워크 예외)', isPass: false
         });
       }
 
@@ -797,7 +797,7 @@
       } catch {
         items.push({
           step: '12단계', category: '정상 요청 (작전실)', desc: '작전실 메타데이터 조회',
-          apiResult: '작전실 API 점검 완료', reqId: generateReqId(), time: getIsoTime(), status: '허용 확인 (통과)', isPass: true
+          apiResult: '요청 실패 예외 발생', reqId: generateReqId(), time: getIsoTime(), status: '점검 실패 (네트워크 예외)', isPass: false
         });
       }
 
