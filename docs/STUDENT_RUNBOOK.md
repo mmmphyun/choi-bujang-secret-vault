@@ -20,7 +20,7 @@
 
 ## 2. 프로젝트 폴더 구조 및 역할
 
-작업의 Git 최상위 폴더(`C:\work\aleph-defense`) 기준 디렉터리 구성입니다.
+작업의 Git 최상위 저장소 루트 디렉터리 기준 구성입니다.
 
 ```
 aleph-defense/
@@ -49,7 +49,7 @@ aleph-defense/
 │   └── aleph.json            # 배포 메타데이터 (빌드 시 생성)
 ├── scripts/                  # 빌드, 검증, 번들링 및 복구 스크립트
 │   ├── build-public.mjs      # 정적 빌드 스크립트 (`npm run build`) (제공 코드)
-│   ├── bundle.mjs            # 단계별 검증 및 제출 묶음 생성 (`npm run bundle`) (제공 코드)
+│   ├── bundle.mjs            # 1~12단계 검증 및 제출 묶음 생성 (`npm run bundle`) (제공 코드)
 │   ├── decider-test.mjs      # 판정기 로컬 시뮬레이션 검증 (`npm run decider:test`) (제공 코드)
 │   ├── detect-test.mjs       # 탐지기 로컬 시뮬레이션 검증 (`npm run detect:test`) (제공 코드)
 │   ├── fixture-7.mjs         # 복합 이상 접속 검증 (`npm run fixture:7`) (제공 코드)
@@ -68,12 +68,14 @@ aleph-defense/
 ├── test/                     # 단위 및 통합 테스트 스위트
 │   ├── action.test.mjs       # 19단계 조치 분리 및 실측 검증
 │   ├── ai-connection.test.mjs# 17단계 AI 연결 및 설명 검증
-│   ├── build-identity.test.mjs# 배포 식별자 검증
+│   ├── device.test.mjs       # 기기 식별자 검증
+│   ├── events.test.mjs       # 15단계 이벤트 목록 및 상세 검증
 │   ├── explanation.test.mjs  # 18단계 근거 기반 설명 검증
+│   ├── r5.test.mjs           # 빌드 식별자 및 1단계 점검 검증
 │   ├── restore.test.mjs      # 11단계 메모 및 정책 복구 검증
-│   ├── student-events.test.mjs# 15단계 이벤트 목록 및 상세 검증
-│   ├── student-status.test.mjs# 14단계 기기/세션/진단 상태 검증
+│   ├── status.test.mjs       # 14단계 기기/세션/진단 상태 검증
 │   └── vulnerabilities.test.mjs# 20단계 취약점 및 OSV 매핑 검증
+├── .env.local.example        # 로컬 환경변수 템플릿 파일 (비밀값 제외)
 ├── aleph.config.json         # 과제 단계 설정 및 허용 엔드포인트 명세
 ├── package.json              # 패키지 명세 및 스크립트 정의
 └── package-lock.json         # 의존성 고정 락 파일
@@ -84,9 +86,9 @@ aleph-defense/
 ## 3. 작업 위치 및 실행 명령어
 
 ### 3.1 PowerShell 실행 위치
-반드시 Git 저장소의 최상위 디렉터리에서 PowerShell을 실행합니다:
+반드시 Git 저장소의 최상위 디렉터리(저장소 루트)에서 PowerShell을 실행합니다:
 ```powershell
-Set-Location -Path "C:\work\aleph-defense"
+Set-Location -Path "<저장소_루트_경로>"
 ```
 
 ### 3.2 의존성 설치
@@ -97,7 +99,27 @@ npm install
 - `@supabase/supabase-js`: `2.117.2`
 - `jose`: `6.2.12`
 
-### 3.3 로컬 개발 서버 실행 및 브라우저 접속
+### 3.3 새 환경의 환경변수 설정 준비 (.env.local)
+새로운 환경에서 인증 및 데이터베이스 프록시가 정상 작동할 수 있도록 환경변수를 준비합니다. 비밀값(API 키, 서비스 롤 키)은 절대 Git에 커밋하지 않으며, 프로젝트 루트의 `.env.local.example`을 참고하여 `.env.local` 파일을 생성하거나 PowerShell 세션 환경변수로 주입합니다:
+
+1. **환경변수 명세 및 역할**:
+   - `SUPABASE_URL`: Supabase 프로젝트 HTTPS 주소 (로그인 및 메모 REST API 통신용)
+   - `SUPABASE_ANON_KEY`: Supabase Anon 공개 키 (`api/auth.js` 로그인 프록시용)
+   - `SUPABASE_SECRET_KEY` (또는 `SUPABASE_SERVICE_ROLE_KEY`): 서버 전용 서비스 롤 키 (`api/_auth.js` JWT 서명 검증 및 REST 통신용)
+   - `AI_GATEWAY_URL`: 외부 AI 게이트웨이 주소 (선택: 미설정 시 기본 심판 주소 사용)
+   - `AI_GATEWAY_TOKEN`: 외부 AI 게이트웨이 토큰 (선택: 인가 접근용)
+2. **새 환경 설정 예시 (PowerShell)**:
+   ```powershell
+   # 저장소 루트에서 템플릿 복사 후 실제 값 입력
+   Copy-Item .env.local.example .env.local
+
+   # 또는 셸 세션 환경변수로 직접 주입
+   $env:SUPABASE_URL = "https://<your-project>.supabase.co"
+   $env:SUPABASE_ANON_KEY = "<anon-key>"
+   $env:SUPABASE_SECRET_KEY = "<service-role-key>"
+   ```
+
+### 3.4 로컬 개발 서버 실행 및 브라우저 접속
 본 프로젝트는 Vercel Serverless Function(`api/`)과 정적 웹 자원(`public/`)을 로컬에서 함께 구동할 수 있도록 `package.json`에 `dev` 스크립트(`npx -y vercel dev`)를 지원합니다.
 ```powershell
 npm run dev
@@ -112,13 +134,13 @@ npm run dev
 - **브라우저 접근 주소**: `http://localhost:3000` 접속 시 로그인 화면 및 작전실 대시보드 렌더링 확인.
 - **종료 방법**: PowerShell 창에서 `Ctrl + C` 입력 후 `Y` 선택.
 
-### 3.4 로컬 정적 빌드
+### 3.5 로컬 정적 빌드
 ```powershell
 npm run build -- --local
 ```
 - **정상 완료 신호**: 오류 없이 프로세스가 종료되며 `public/` 디렉터리에 배포 자원이 준비됨.
 
-### 3.5 전체 단위 테스트 스위트 검증 (65종 전수 통과)
+### 3.6 전체 단위 테스트 스위트 검증 (65종 전수 통과)
 ```powershell
 npm run test:r5
 ```
@@ -129,7 +151,7 @@ npm run test:r5
   ℹ fail 0
   ```
 
-### 3.6 독립 보안 엔진 및 정책 시뮬레이션 검증
+### 3.7 독립 보안 엔진 및 정책 시뮬레이션 검증
 `src/` 디렉터리의 판정기 및 탐지기는 웹 API 내부 미들웨어가 아닌 독립 시뮬레이션 모듈로서 다음 스크립트로 동작을 검증합니다:
 ```powershell
 # 접근 제어 판정기 가상 요청 시험 (9개 시나리오 통과 확인)
@@ -148,30 +170,19 @@ npm run policy:diff
 npm run policy:restore
 ```
 
-### 3.7 번들 생성 전 준비 사항 및 `bundle-notes.json` 작성 가이드
-`scripts/bundle.mjs`(`npm run bundle`)는 실행 시 프로젝트 루트의 `bundle-notes.json`을 읽어 제출 묶음을 생성합니다. 이 파일은 개인 제출 메모가 포함되므로 `.gitignore`에 등록되어 저장소에 기본 커밋되지 않습니다. 새로 클론한 환경에서는 번들을 실행하기 전에 아래와 같이 프로젝트 루트에 파일을 생성해야 합니다:
+### 3.8 번들 생성 도구의 22단계 미지원 팩트 및 원문 제출 안내
+* **`npm run bundle` 미지원 상태 명시**:
+  * 제공 코드인 `scripts/bundle.mjs`와 `scripts/deployment-identity.mjs`는 `config.step <= 12` 조건으로 작성되어 있습니다.
+  * 현재 `aleph.config.json`의 22단계 설정(`"step": 22`)에서는 `npm run bundle` 실행 시 `aleph.config.json의 step을 확인해 주세요` 예외가 발생하며 **지원되지 않습니다**.
+  * 마찬가지로 일반 `npm run build`도 `deploymentIdentity`의 단계 제한으로 인해 로컬 플래그(`--local`) 없이 실행 시 배포 식별 확인 실패 예외가 발생합니다.
+* **22단계 공식 원문 제출 방식**:
+  * 22단계는 번들 스크립트가 아닌 공식 **비공개 저장소 원문 전달 도구(`student-source-cli.mjs`)**를 사용하여 40자리 최종 커밋 원문을 직접 묶어 포털에 제출합니다.
+  * 실행 명령:
+    ```powershell
+    node "<도구_경로>\student-source-cli.mjs" --output "<출력_경로>\alekov-source.json" --commit <40자리_커밋_해시>
+    ```
 
-1. **`bundle-notes.json` 파일 생성**:
-   루트 디렉터리(`C:\work\aleph-defense\bundle-notes.json`)에 UTF-8 인코딩으로 다음 JSON 템플릿을 생성합니다:
-   ```json
-   {
-     "explanation": "1. 학생용 실행 설명서(STUDENT_RUNBOOK.md) 및 시스템 아키텍처를 실제 구현과 일치시켰습니다.\n2. 로컬 개발 서버 구동 스크립트와 번들 사전 준비 절차를 완비했습니다.\n3. 오류별 실제 코드 원인과 제공/학생 경계를 명확히 분리 정리했습니다.",
-     "blockedAt": null
-   }
-   ```
-   *주의*: `explanation` 필드는 최소 10자 이상의 3줄 요약 문자열이어야 합니다.
-
-2. **자기 점검 번들 생성 실행**:
-   ```powershell
-   npm run bundle
-   ```
-   - **정상 완료 신호**:
-     ```text
-     제출 묶음 JSON 생성: C:\work\aleph-defense\artifacts\submission.json
-     단계 12 · 커밋 ... · 바뀐 파일 ... · 규칙 3개 · 직접 점검 17개
-     ```
-
-### 3.8 재실행 순서
+### 3.9 재실행 순서
 코드나 문서를 수정한 후에는 `npm run test:r5`로 기존 65개 단위 기능의 비회귀(Non-regression) 상태를 먼저 확인하고, `npm run dev`로 로컬 서버를 재시작하여 브라우저에서 화면을 확인합니다.
 
 ---
@@ -376,7 +387,7 @@ README.md와 본 문서는 동일한 기준으로 코드 작성 주체 및 경�
 
 ## 8. 22단계 새 환경 재현 절차 및 재현 기록 (Reproduction Runbook)
 
-본 절은 제3자 및 평가자가 원본 작업 폴더(`C:\work\aleph-defense`)를 보존한 상태에서 동일한 커밋을 독립된 새 폴더에 내려받아 완전한 재현을 수행할 수 있도록 표준 절차를 규정합니다.
+본 절은 제3자 및 평가자가 원본 작업 폴더를 보존한 상태에서 동일한 커밋을 독립된 새 폴더에 내려받아 완전한 재현을 수행할 수 있도록 표준 절차를 규정합니다. 특정 로컬 드라이브 절대경로에 의존하지 않고 임의의 경로에서 수행할 수 있습니다.
 
 ### 8.1 형상 정보 및 기준 커밋
 * **원격 저장소 URL**: `https://github.com/mmmphyun/choi-bujang-secret-vault.git`
@@ -387,17 +398,17 @@ README.md와 본 문서는 동일한 기준으로 코드 작성 주체 및 경�
 ### 8.2 격리된 새 폴더 재현 실행 절차 (단계별 명령어)
 
 ```powershell
-# 1. 원래 폴더(C:\work\aleph-defense)를 보존하고 별도의 검증 폴더 생성
-New-Item -ItemType Directory -Path "C:\work\aleph-defense-verify" -Force
-Set-Location -Path "C:\work\aleph-defense-verify"
+# 1. 원본 작업 디렉터리를 보존하고 별도의 새 검증 폴더 생성 및 이동
+New-Item -ItemType Directory -Path ".\reproduction-verify" -Force
+Set-Location -Path ".\reproduction-verify"
 
-# 2. 동일 커밋 소스코드 복제 (GitHub 원격 또는 원본 로컬 폴더에서 복제)
-# 방법 A: GitHub 원격에서 복제
+# 2. 동일 커밋 소스코드 복제 (GitHub 원격 또는 원본 로컬 저장소에서 복제)
+# 방법 A: GitHub 원격 저장소에서 복제
 git clone https://github.com/mmmphyun/choi-bujang-secret-vault.git .
 git checkout main
 
-# 방법 B: 원본 로컬 폴더에서 직접 복제 (GitHub 미반영 시)
-# git clone C:\work\aleph-defense .
+# 방법 B: 원본 로컬 저장소 디렉터리에서 복제 (오프라인 환경)
+# git clone <원본_저장소_루트_경로> .
 
 # 3. 커밋 해시 확인 (40자리 일치 여부 대조)
 git rev-parse HEAD
@@ -407,14 +418,17 @@ node -v
 npm -v
 git --version
 
-# 5. 기존 폴더의 .env.local 및 인증 파일 무작정 복사 금지
-# 본 프로젝트는 로컬 검증 시 정적 픽스처 및 모의 모듈을 우선 사용하며,
-# 실서버 연동 필요 시에만 관리자가 환경변수를 별도로 설정합니다.
+# 5. 새 환경의 환경변수 설정 준비 (.env.local)
+# 비밀값(토큰, 키)은 Git에 커밋되지 않으므로 템플릿을 복사하여 준비합니다.
+# 순수 로컬 단위 테스트(test:r5, decider, detect)는 환경변수 없이도 모의 데이터로 통과 가능하며,
+# 로컬 개발 서버(npm run dev)에서 실서버 API 연동 시에만 실제 Supabase 키를 입력합니다.
+Copy-Item .env.local.example .env.local
 
 # 6. 클린 의존성 설치 (package-lock.json 고정 의존성 준수)
 npm install
 
 # 7. 로컬 정적 빌드 검증 (public/data.json 누출 차단 확인)
+# 주의: --local 플래그 없이 실행하면 12단계 초과 설정으로 배포 식별 검증이 차단됩니다.
 npm run build -- --local
 
 # 8. 65종 전수 단위 테스트 스위트 검증
@@ -450,7 +464,7 @@ npm run dev
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **13-14단계** | 기기/세션 상태 분리 및 민감정보 제거 | 2026-11-03 | 7/7 PASS | `test/status.test.mjs`<br>`student/extension.mjs:renderStatus` | **모의 성공**: 가상 기기·세션 데이터 분리 및 진단 마스킹 통과.<br>**실제 한계**: 실제 MDM 기기 등록 서버 및 사내 세션 서버 연동 미수행. |
 | **15단계** | 보안 사건/경보 목록 렌더링 및 계약 불일치 처리 | 2026-11-03 | 10/10 PASS | `test/events.test.mjs`<br>`student/extension.mjs:renderEvents` | **모의 성공**: 정적 사건 배열 최신순 정렬 및 CONTRACT_MISMATCH 처리 검증.<br>**실제 한계**: 실제 SIEM/XDR 실시간 이벤트 스트림 미연결. |
-| **16단계** | 정책 변조 대조 및 사본 무결성 복구 | 2026-11-03 | 4/4 PASS | `test/attack-check.test.mjs`<br>`src/policy-manager.mjs`<br>`api/notes/restore.js` | **모의 성공**: SHA-256 해시 기반 단건 사본 복구 및 변조 차이 식별 통과.<br>**실제 한계**: 외부 Supabase 통신 실패 시에도 200 반환하는 격리 모의 특성. |
+| **16단계** | 정책 변조 대조 및 사본 무결성 복구 | 2026-11-03 | 4/4 PASS | `test/r5.test.mjs`<br>`test/restore.test.mjs`<br>`src/policy-manager.mjs`<br>`api/notes/restore.js` | **모의 성공**: SHA-256 해시 기반 단건 사본 복구 및 변조 차이 식별 통과.<br>**실제 한계**: 외부 Supabase 통신 실패 시에도 200 반환하는 격리 모의 특성. |
 | **17단계** | AI 연결 상태 점검 (4단계 상태 및 7대 에러) | 2026-11-03 | 12/12 PASS | `test/ai-connection.test.mjs`<br>`api/ai/connection.js`<br>`student/extension.mjs:renderAiConnection` | **모의 및 직접 실측**: 외부 AI 게이트웨이 직접 전송 점검(`transportChecked`) 및 대기 상태 반환.<br>**실제 한계**: 유료 상용 LLM API 직접 호출 미수행(수업용 모의 규격). |
 | **18단계** | 근거 바인딩 AI 설명 및 지연 응답 무효화 | 2026-11-03 | 9/9 PASS | `test/explanation.test.mjs`<br>`student/extension.mjs:renderExplanation` | **모의 성공**: 모의 근거 ID 일치 시에만 인용 문장 바인딩 및 data 속성 부여.<br>**실제 한계**: 실제 `api/ai/explain.js`는 근거 ID를 반환하지 않아 INSUFFICIENT_EVIDENCE 처리됨. |
 | **19단계** | 보안 조치 요청 상태 및 실제 효과 분리 | 2026-11-03 | 10/10 PASS | `test/action.test.mjs`<br>`student/extension.mjs:renderAction` | **모의 성공**: `effectApplied===true` 엄격 검증 및 상태 11종 IT 표준어 렌더링.<br>**실제 한계**: **보안 조치 실집행(`proposals` 서버 연동) 미지원**. 시뮬레이션 분기만 검증됨. |
@@ -478,15 +492,24 @@ npm run dev
    - 각 메모 항목의 본문(`content`)을 SHA-256으로 해싱하여 `contentHash` 필드를 산출합니다.
 2. **단건 무결성 복원 절차 (`POST /api/notes/restore`)**:
    - 복구 요청 본문: `{ "id": "<메모ID>", "owner": "<소유자ID>", "contentHash": "<SHA-256해시>", "content": "<본문(선택)>" }`
-   - 핸들러 검증 단계:
-     - 1단계: `src/backup-notes.json`에서 ID 검색 (부재 시 요청 본문의 content, owner_id, contentHash 유효성으로 사본 인정)
-     - 2단계: 요청된 `contentHash`와 사본의 실제 계산 SHA-256 해시값 일치 여부 대조 (불일치 시 `400 Bad Request`)
-     - 3단계: 사본의 `owner_id`와 요청 본문 및 요청자 JWT의 `userId` 일치 여부 검증 (불일치 시 `403 Forbidden`)
-     - 4단계: 무결성 검증 통과 시 데이터 복구 승인 및 200 반환
+   - 핸들러 실제 검증 단계 (`api/notes/restore.js` 소스코드 기준):
+     - 1단계 (사본 확보): `src/backup-notes.json`에서 ID 검색. 파일에 없을 경우 요청 본문에 유효한 백업 데이터(`content`, `owner_id`, `contentHash` 및 계산된 SHA-256 일치)가 포함되어 있으면 사본으로 인정. 둘 다 없으면 `404 Not Found`.
+     - 2단계 (무결성 대조): 요청된 `contentHash`와 사본의 실제 계산 SHA-256 해시값 일치 여부 대조 (불일치 시 `400 Bad Request`).
+     - 3단계 (본문 소유자 대조): 요청 본문에 지정된 `owner_id`가 사본의 `owner_id`와 다를 경우 `403 Forbidden`.
+     - 4단계 (선택적 JWT 인가 검증): **요청 헤더에 `Authorization`이 존재하는 경우에만** JWT 토큰을 검증하여 요청자 `userId`와 사본의 `owner_id`를 대조(불일치 시 `403 Forbidden`). **헤더가 없으면 JWT 검증을 건너뛰고 무인증 상태로 복원을 계속 진행함**.
+     - 5단계 (DB 갱신 및 응답): 무결성 검증 통과 시 외부 Supabase DB 갱신 시도 후 `200 OK`(`success: true`) 반환.
 
-### 10.3 복구 한계 및 보존 제약 사항
-- **외부 DB 미연결 시 영속화 한계**: `api/notes/restore.js`는 사본 무결성 검증 후 외부 Supabase DB 갱신을 시도하지만, 네트워크 장애나 미연결로 DB 통신이 실패하더라도 에러를 무시하고 `200 OK`(`success: true`)를 반환합니다. 따라서 200 응답이 실제 원격 DB 영속화를 보장하지는 않습니다.
-- **비밀값 및 세션 미보존**: 개인키, 사용자 암호, 세션 토큰은 백업 파일 및 저장소에 일절 보존하지 않으며 클라이언트 로컬 메모리에서만 휘발성으로 처리됩니다.
+### 10.3 복구 한계 및 데이터 보호 범위의 제약 사항
+- **무인증 복원 허용 및 권한 통제 한계**:
+  - `api/notes/restore.js`는 `Authorization` 헤더가 없는 요청에 대해 거부하지 않고, 본문의 `owner_id`와 SHA-256 `contentHash` 일치 여부만으로 복원을 허용합니다.
+  - 이는 인증 세션이 만료되거나 인증 서버 장애 시에도 무결성이 검증된 사본을 복구할 수 있도록 의도된 설계입니다.
+  - 그러나 보안상 한계로서, 비인가자라 하더라도 사본의 메타데이터(`id`, `owner_id`, `contentHash`)를 취득하면 인증 토큰 없이 복원 API를 호출할 수 있는 제한이 존재합니다.
+  - 따라서 본 시스템의 복원 보호 범위는 '엄격한 사용자 신원 인가 보장'이 아닌 'SHA-256 해시 기반 사본 무결성 보존'에 중점을 둡니다.
+- **외부 DB 미연결 시 영속화 한계**:
+  - 핸들러는 사본 검증 통과 후 Supabase DB 통신 실패(`try-catch`)가 발생하더라도 에러를 무시하고 `200 OK`(`success: true`)를 반환합니다.
+  - 따라서 200 응답이 실제 원격 DB 영속화를 보장하지 않으므로, 복구 후 `GET /api/notes/:id` 조회를 통한 대조 확인이 요구됩니다.
+- **비밀값 및 세션 미보존**:
+  - 개인키, 사용자 암호, 세션 토큰은 백업 파일 및 저장소에 일절 보존하지 않으며 클라이언트 로컬 메모리에서만 휘발성으로 처리됩니다.
 
 ---
 

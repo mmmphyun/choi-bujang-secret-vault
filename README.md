@@ -442,19 +442,19 @@
 * **작동하는 기능**:
   * **상세 실행 설명서 작성 (`docs/STUDENT_RUNBOOK.md`)**:
     * 실제 확인된 Node.js(`v24.22.1`), npm(`11.19.1`), Git(`2.55.0.windows.5`) 환경 명시
-    * PowerShell 실행 경로(`C:\work\aleph-defense`) 및 의존성 설치(`npm install`), 로컬 개발 서버 구동(`npm run dev`), 빌드(`npm run build -- --local`), 65종 단위 테스트(`npm run test:r5`), 판정기/탐지기 검증, 종료(`Ctrl+C`), 재실행 절차 정리
-    * 번들 생성 사전 준비(`bundle-notes.json` 템플릿 생성) 및 `npm run bundle` 실행 절차 안내
+    * 저장소 루트 기준 PowerShell 실행 경로 및 의존성 설치(`npm install`), 환경변수 템플릿(`.env.local.example`) 안내, 로컬 개발 서버 구동(`npm run dev`), 로컬 정적 빌드(`npm run build -- --local`), 65종 단위 테스트(`npm run test:r5`), 판정기/탐지기 검증, 종료(`Ctrl+C`), 재실행 절차 정리
     * 브라우저 로컬(`http://localhost:3000`) 및 공개 배포 주소(`https://choi-bujang-secret-vault-evun.vercel.app`) 명시
+    * `scripts/bundle.mjs`와 `scripts/deployment-identity.mjs`는 `config.step <= 12` 전용 코드이므로, 22단계 설정(`step: 22`)에서는 `npm run bundle`이 지원되지 않고 오류가 발생함을 명시
   * **시스템 아키텍처 다이어그램 및 실제 데이터 흐름 기술**:
     * 브라우저 → 서버리스 API(`api/`) → 외부 서비스(Supabase REST API 직접 호출, 외부 AI 게이트웨이 직접 실측)의 실제 데이터 흐름을 Mermaid, ASCII, 표로 다중 작성
     * `api/notes/*`는 판정기 호출 없이 Supabase 직접 요청 및 소유자(`owner_id`) 격리 수행
-    * `api/notes/restore.js`는 선택적 인증(`Authorization` 헤더 존재 시에만 검증)을 지원하며, 저장 파일에 없는 ID라도 요청 본문에 유효한 사본(`content`, `owner_id`, `contentHash` 일치)이 포함되면 복구 대상으로 인정함. 사본 검증 통과 후 DB 통신 실패 여부와 무관하게(에러 무시) 200 성공(`success: true`)을 반환하는 특성을 명시
+    * `api/notes/restore.js`는 선택적 인증(`Authorization` 헤더 존재 시에만 검증)을 지원하며, 헤더가 없으면 무인증 상태로 복원을 통과시킴. 저장 파일에 없는 ID라도 요청 본문에 유효한 사본(`content`, `owner_id`, `contentHash` 일치)이 포함되면 복구 대상으로 인정함. 사본 검증 통과 후 DB 통신 실패 여부와 무관하게(에러 무시) 200 성공(`success: true`)을 반환하는 특성을 명시
     * `api/device/verify.js`는 자체 승인 응답 반환, `api/events.js`는 정적 배열 반환, `api/ai/explain.js`는 고정 요약 템플릿만 반환하고 근거 ID(`evidenceIds`)를 전달하지 않아 렌더러 연동 시 근거 부족(`INSUFFICIENT_EVIDENCE`)으로 처리되는 실제 코드 동작과 100% 일치시킴
     * 독립 시뮬레이션 엔진(`src/decider.mjs`, `src/detect.mjs`, `src/policy-manager.mjs`)은 웹 API 미들웨어가 아닌 로컬 테스트 모듈로 명확히 분리
     * 실제 파일 경로 및 공개 주소만 기술하고 비밀 설정값(토큰, API 키)은 전면 배제
   * **기능 경계 및 검증 상태 구분 (일원화)**:
     * 제공 코드 경계: `public/app.js` (기본 UI 로직), `api/events.js`, `api/ops/summary.js`, `api/notices/`, `docs/DECIDER_REQUEST.md`, `docs/DETECT_EVENTS.md`, `scripts/`
-    * 학생 작성/수정 코드: `public/index.html` (학생 접속 앱 보완), `student/extension.mjs`, `api/_auth.js`, `api/auth.js`, `api/notes/`, `api/device/verify.js`, `api/ai/`, `src/`, `docs/STUDENT_RUNBOOK.md`, `package.json`
+    * 학생 작성/수정 코드: `public/index.html` (학생 접속 앱 보완), `student/extension.mjs`, `api/_auth.js`, `api/auth.js`, `api/notes/`, `api/device/verify.js`, `api/ai/`, `src/`, `docs/STUDENT_RUNBOOK.md`, `package.json`, `.env.local.example`
     * 직접 실측 완료된 65개 단위 테스트 및 검증 스크립트와 미확인 항목(심판 서버 실시간 연동, 사내망 mTLS 연동 등) 명시
     * 오류별(404: 사본 파일 및 본문 사본 모두 부재 시, 403: 소유자/자료구역 불일치, 400: 해시불일치/기기식별자/제목누락, 200: 사본 검증 성공 및 DB 실패 무시) 실제 소스코드 원인과 점검 순서 정리
 * **다시 실행하는 방법**:
@@ -472,17 +472,18 @@
 
 * **작동하는 기능**:
   * **새 환경 재현 절차 규정 및 검증 (`docs/STUDENT_RUNBOOK.md:8`)**:
-    * 원본 작업 폴더(`C:\work\aleph-defense`)를 보존하고 격리된 새 폴더(`C:\work\aleph-defense-verify`)에서 동일 커밋 복제(`git clone`) 및 재현 실행 절차 수립
+    * 원본 작업 폴더를 보존하고 임의의 새 검증 폴더에서 동일 커밋 복제(`git clone`) 및 재현 실행 절차 수립 (특정 로컬 절대경로 의존성 탈피)
     * 필수 런타임 검증(Node.js `v24.22.1`, npm `11.19.1`, Git `2.55.0.windows.5`)
-    * 기존 폴더의 `.env.local` 및 인증 파일 무작정 복사 금지 원칙 준수
-    * 클린 설치(`npm install`), 정적 빌드(`npm run build -- --local`), 단위 테스트(`npm run test:r5`), 시뮬레이션 판정기/탐지기 검증, 서버 구동/종료(`Ctrl+C`)/재실행 무결성 확인
+    * 새 환경 환경변수 설정 가이드(`.env.local.example` 템플릿 복사 및 주입 절차) 안내
+    * 클린 설치(`npm install`), 로컬 정적 빌드(`npm run build -- --local`), 단위 테스트(`npm run test:r5`), 시뮬레이션 판정기/탐지기 검증, 서버 구동/종료(`Ctrl+C`)/재실행 무결성 확인
+    * `scripts/bundle.mjs`의 단계 제한(`config.step <= 12`)으로 인해 22단계(`step: 22`)에서는 `npm run bundle`이 지원되지 않음을 명시하고, 비공개 원문 도구(`student-source-cli.mjs`)를 사용하는 22단계 공식 제출 절차 준수
   * **13-21단계 전수 기능 검증 및 상태 매트릭스 (`docs/STUDENT_RUNBOOK.md:9`)**:
     * 13단계부터 21단계까지 65개 단위 테스트 전수 통과(65/65 PASS) 실측 기록
     * 모의 데이터 성공(단위 테스트/모의 픽스처)과 실제 시스템 연결 성공(Supabase/AI 게이트웨이/사내망)을 엄격히 구분하여 기술
   * **학생 데이터 보존·백업 및 복원 계획 (`docs/STUDENT_RUNBOOK.md:10`)**:
     * 메모 원본(`Supabase`) 및 로컬 사본(`src/backup-notes.json`) 보존 구조화
     * SHA-256 해시 검증 기반 단건 사본 복원 핸들러(`POST /api/notes/restore`) 검증 절차 명시
-    * 외부 DB 미연결 시 로컬 사본 무결성만 검증하고 DB 영속화는 건너뛰는 200 반환 특성 및 보존 한계 명시
+    * **무인증 복원 허용 및 데이터 보호 범위 한계 명시**: `Authorization` 헤더가 전달된 경우에만 JWT 소유자 검증을 수행하며, 헤더가 없을 경우 본문 `owner_id`와 `contentHash` 일치만으로 무인증 복원을 허용함. 사본 메타데이터 노출 시 비인가 복원 호출 가능성 및 외부 DB 미연결 시 영속화 실패 무시 특성을 정확히 기술
   * **릴리스 버전 및 지원 범위 한계 명시 (`docs/STUDENT_RUNBOOK.md:11`)**:
     * 현재 버전: `v0.9.22-rc (Defense Stage 22 Release Candidate, 검증 중인 버전)`
     * 본 22단계 통과는 서버 AI의 원문 검토 기준 수료이며, 실제 운영 인증이나 v1.0 자동 인증이 아님을 명시
@@ -491,29 +492,33 @@
   * **격리된 새 폴더 재현 실행**:
     ```powershell
     # 1. 새 검증 폴더 생성 및 복제
-    New-Item -ItemType Directory -Path "C:\work\aleph-defense-verify" -Force
-    Set-Location -Path "C:\work\aleph-defense-verify"
+    New-Item -ItemType Directory -Path ".\reproduction-verify" -Force
+    Set-Location -Path ".\reproduction-verify"
     git clone https://github.com/mmmphyun/choi-bujang-secret-vault.git .
     git checkout main
 
-    # 2. 런타임 확인 및 의존성 설치
+    # 2. 런타임 확인 및 환경변수 템플릿 준비
     node -v
     npm -v
-    npm install
+    Copy-Item .env.local.example .env.local
 
-    # 3. 전체 단위 테스트 검증 (65종)
+    # 3. 의존성 설치 및 로컬 정적 빌드
+    npm install
+    npm run build -- --local
+
+    # 4. 전체 단위 테스트 검증 (65종)
     npm run test:r5
 
-    # 4. 판정기 및 이상 탐지 시뮬레이션
+    # 5. 판정기 및 이상 탐지 시뮬레이션
     npm run decider:test
     npm run detect:test
     ```
-  * **현재 작업 폴더(`C:\work\aleph-defense`)에서 전체 테스트 검증**:
+  * **현재 작업 디렉터리에서 전체 테스트 검증**:
     ```powershell
     npm run test:r5
     ```
   * **비공개 저장소 원문 전달 도구 실행 안내**:
     ```powershell
     # 제출할 프로젝트 최상위 폴더에서 실행 (40자리 커밋 해시 지정)
-    node "C:\도구\alekov-source-tool\student-source-cli.mjs" --output "C:\제출자료\alekov-source.json" --commit <40자리커밋해시>
+    node "<도구_경로>\student-source-cli.mjs" --output "<출력_경로>\alekov-source.json" --commit <40자리커밋해시>
     ```
