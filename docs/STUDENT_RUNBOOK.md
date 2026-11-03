@@ -371,3 +371,142 @@ README.md와 본 문서는 동일한 기준으로 코드 작성 주체 및 경�
 | **`405 Method Not Allowed`**<br>(메소드 불허) | `api/device/verify.js:6`<br>`api/events.js:111`<br>`api/notes/index.js:75`<br>`api/notes/restore.js:20` | 1. `api/device/verify`에 GET 호출<br>2. `api/events`에 POST 호출<br>3. `api/notes`에 PUT/DELETE 호출<br>4. `api/notes/restore`에 GET 호출 | 1. API 명세에 규정된 올바른 HTTP 메서드(GET, POST, PUT, DELETE)로 요청 |
 | **`503` / `AUTH_PENDING`**<br>(AI 연결 대기/실패) | `api/ai/connection.js:37, 51, 65` | 1. 외부 AI 게이트웨이 응답 시간 초과(`TIMEOUT`)<br>2. 게이트웨이 전송 점검(`transportChecked: true`) 미확인 또는 계정 권한 준비 중 | 1. 자동 재시도하지 않고 화면의 「다시 점검」 버튼을 수동으로 클릭<br>2. 게이트웨이 접속 환경변수(`AI_GATEWAY_URL`, `AI_GATEWAY_TOKEN`) 확인 |
 | **`시뮬레이션 거부`**<br>(판정기 가상 시나리오) | `src/decider.mjs` (`decide`) | `npm run decider:test` 실행 시 미등록 기기(`deviceRegistered: false`), 복합 이상 접속(`step_up`), 전체 목록 경로 요청에 대한 시뮬레이션 거부 | 1. 본 거부는 독립 시뮬레이션 시험의 정상 동작 결과임<br>2. `docs/DECIDER_REQUEST.md` 규칙 명세와 `src/decider.mjs`의 `RULE_IDS` 구현 대조 |
+
+---
+
+## 8. 22단계 새 환경 재현 절차 및 재현 기록 (Reproduction Runbook)
+
+본 절은 제3자 및 평가자가 원본 작업 폴더(`C:\work\aleph-defense`)를 보존한 상태에서 동일한 커밋을 독립된 새 폴더에 내려받아 완전한 재현을 수행할 수 있도록 표준 절차를 규정합니다.
+
+### 8.1 형상 정보 및 기준 커밋
+* **원격 저장소 URL**: `https://github.com/mmmphyun/choi-bujang-secret-vault.git`
+* **대상 브랜치**: `main`
+* **기준 커밋 해시 (40자리)**: `c26b925a843fd6b715a14e10e5f69ad37f4da73f` (또는 최종 22단계 제출 커밋)
+* **보안 Agent 명칭**: `지지오`
+
+### 8.2 격리된 새 폴더 재현 실행 절차 (단계별 명령어)
+
+```powershell
+# 1. 원래 폴더(C:\work\aleph-defense)를 보존하고 별도의 검증 폴더 생성
+New-Item -ItemType Directory -Path "C:\work\aleph-defense-verify" -Force
+Set-Location -Path "C:\work\aleph-defense-verify"
+
+# 2. 동일 커밋 소스코드 복제 (GitHub 원격 또는 원본 로컬 폴더에서 복제)
+# 방법 A: GitHub 원격에서 복제
+git clone https://github.com/mmmphyun/choi-bujang-secret-vault.git .
+git checkout main
+
+# 방법 B: 원본 로컬 폴더에서 직접 복제 (GitHub 미반영 시)
+# git clone C:\work\aleph-defense .
+
+# 3. 커밋 해시 확인 (40자리 일치 여부 대조)
+git rev-parse HEAD
+
+# 4. 필수 런타임 버전 확인 (Node.js >=22, npm 최신, Git 2.x)
+node -v
+npm -v
+git --version
+
+# 5. 기존 폴더의 .env.local 및 인증 파일 무작정 복사 금지
+# 본 프로젝트는 로컬 검증 시 정적 픽스처 및 모의 모듈을 우선 사용하며,
+# 실서버 연동 필요 시에만 관리자가 환경변수를 별도로 설정합니다.
+
+# 6. 클린 의존성 설치 (package-lock.json 고정 의존성 준수)
+npm install
+
+# 7. 로컬 정적 빌드 검증 (public/data.json 누출 차단 확인)
+npm run build -- --local
+
+# 8. 65종 전수 단위 테스트 스위트 검증
+npm run test:r5
+
+# 9. 독립 정책 판정기 및 이상 탐지 엔진 시뮬레이션 검증
+npm run decider:test
+npm run detect:test
+npm run fixture:7
+npm run policy:diff
+
+# 10. 로컬 개발 서버 구동 (포트 3000)
+npm run dev
+
+# 11. 브라우저 확인
+# 브라우저에서 http://localhost:3000 접속 후 화면 및 콘솔 에러 부재 확인
+
+# 12. 서버 정상 종료
+# 터미널에서 Ctrl + C 입력하여 프로세스 종료
+
+# 13. 재실행 검증
+# 서버를 다시 구동하여 정상 시작 확인 후 종료
+npm run dev
+```
+
+---
+
+## 9. 13-21단계 전수 기능 검증 및 상태 매트릭스
+
+본 매트릭스는 13단계부터 21단계까지 각 기능의 단위 테스트(모의 데이터) 통과 여부와 실제 외부 시스템 연결 상태를 명확히 구분하여 기록합니다.
+
+| 단계 | 기능명 | 검증 일시 | 테스트 결과 | 검증 근거 (코드 및 테스트) | 모의 데이터 vs 실제 시스템 연결 구분 및 미확인 원인 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **13-14단계** | 기기/세션 상태 분리 및 민감정보 제거 | 2026-11-03 | 7/7 PASS | `test/status.test.mjs`<br>`student/extension.mjs:renderStatus` | **모의 성공**: 가상 기기·세션 데이터 분리 및 진단 마스킹 통과.<br>**실제 한계**: 실제 MDM 기기 등록 서버 및 사내 세션 서버 연동 미수행. |
+| **15단계** | 보안 사건/경보 목록 렌더링 및 계약 불일치 처리 | 2026-11-03 | 10/10 PASS | `test/events.test.mjs`<br>`student/extension.mjs:renderEvents` | **모의 성공**: 정적 사건 배열 최신순 정렬 및 CONTRACT_MISMATCH 처리 검증.<br>**실제 한계**: 실제 SIEM/XDR 실시간 이벤트 스트림 미연결. |
+| **16단계** | 정책 변조 대조 및 사본 무결성 복구 | 2026-11-03 | 4/4 PASS | `test/attack-check.test.mjs`<br>`src/policy-manager.mjs`<br>`api/notes/restore.js` | **모의 성공**: SHA-256 해시 기반 단건 사본 복구 및 변조 차이 식별 통과.<br>**실제 한계**: 외부 Supabase 통신 실패 시에도 200 반환하는 격리 모의 특성. |
+| **17단계** | AI 연결 상태 점검 (4단계 상태 및 7대 에러) | 2026-11-03 | 12/12 PASS | `test/ai-connection.test.mjs`<br>`api/ai/connection.js`<br>`student/extension.mjs:renderAiConnection` | **모의 및 직접 실측**: 외부 AI 게이트웨이 직접 전송 점검(`transportChecked`) 및 대기 상태 반환.<br>**실제 한계**: 유료 상용 LLM API 직접 호출 미수행(수업용 모의 규격). |
+| **18단계** | 근거 바인딩 AI 설명 및 지연 응답 무효화 | 2026-11-03 | 9/9 PASS | `test/explanation.test.mjs`<br>`student/extension.mjs:renderExplanation` | **모의 성공**: 모의 근거 ID 일치 시에만 인용 문장 바인딩 및 data 속성 부여.<br>**실제 한계**: 실제 `api/ai/explain.js`는 근거 ID를 반환하지 않아 INSUFFICIENT_EVIDENCE 처리됨. |
+| **19단계** | 보안 조치 요청 상태 및 실제 효과 분리 | 2026-11-03 | 10/10 PASS | `test/action.test.mjs`<br>`student/extension.mjs:renderAction` | **모의 성공**: `effectApplied===true` 엄격 검증 및 상태 11종 IT 표준어 렌더링.<br>**실제 한계**: **보안 조치 실집행(`proposals` 서버 연동) 미지원**. 시뮬레이션 분기만 검증됨. |
+| **20단계** | 패키지 락 고정 버전 및 OSV 취약점 분기 | 2026-11-03 | 9/9 PASS | `test/vulnerabilities.test.mjs`<br>`student/extension.mjs:renderVulnerabilities` | **모의 성공**: `package-lock.json` 고정 버전 매핑 및 3대 상태(known, none, unverifiable) 분기.<br>**실제 한계**: 외부 OSV 라이브 데이터베이스 실시간 네트워크 조회 미연동. |
+| **21단계** | 실행 설명서 및 아키텍처 다이어그램 일원화 | 2026-11-03 | 65/65 PASS | `docs/STUDENT_RUNBOOK.md`<br>`README.md` | **문서 실측 완료**: 소스코드-문서 간 엔드포인트, 상태 코드, 데이터 흐름 100% 정합.<br>**실제 한계**: 실시간 운영망 라이브 채점 미포함. |
+
+---
+
+## 10. 학생 데이터 보존·백업 및 복원 계획 (Data Preservation Plan)
+
+본 절은 학생 가상 자료실의 데이터 손실 방지, 백업 주기, 무결성 검증 복구 절차 및 기술적 한계를 정의합니다.
+
+### 10.1 보존 대상 데이터 구조
+1. **가상 메모 원본 데이터**:
+   - 위치: 외부 Supabase PostgreSQL 데이터베이스 `notes` 테이블
+   - 필드: `id` (UUID), `title`, `content`, `owner_id` (사용자 식별자), `created_at`
+2. **학생 사본 백업 파일**:
+   - 위치: `src/backup-notes.json`
+   - 구조: 메모 배열 (`id`, `title`, `content`, `owner_id`, `contentHash`)
+   - 무결성 지표: `content`의 SHA-256 단방향 암호화 해시값
+
+### 10.2 백업 및 복원 절차
+1. **정기 백업 절차**:
+   - 사용자는 주요 변경 전 Supabase `notes` 데이터를 로컬 `src/backup-notes.json` 파일에 JSON 형식으로 동기화합니다.
+   - 각 메모 항목의 본문(`content`)을 SHA-256으로 해싱하여 `contentHash` 필드를 산출합니다.
+2. **단건 무결성 복원 절차 (`POST /api/notes/restore`)**:
+   - 복구 요청 본문: `{ "id": "<메모ID>", "owner": "<소유자ID>", "contentHash": "<SHA-256해시>", "content": "<본문(선택)>" }`
+   - 핸들러 검증 단계:
+     - 1단계: `src/backup-notes.json`에서 ID 검색 (부재 시 요청 본문의 content, owner_id, contentHash 유효성으로 사본 인정)
+     - 2단계: 요청된 `contentHash`와 사본의 실제 계산 SHA-256 해시값 일치 여부 대조 (불일치 시 `400 Bad Request`)
+     - 3단계: 사본의 `owner_id`와 요청 본문 및 요청자 JWT의 `userId` 일치 여부 검증 (불일치 시 `403 Forbidden`)
+     - 4단계: 무결성 검증 통과 시 데이터 복구 승인 및 200 반환
+
+### 10.3 복구 한계 및 보존 제약 사항
+- **외부 DB 미연결 시 영속화 한계**: `api/notes/restore.js`는 사본 무결성 검증 후 외부 Supabase DB 갱신을 시도하지만, 네트워크 장애나 미연결로 DB 통신이 실패하더라도 에러를 무시하고 `200 OK`(`success: true`)를 반환합니다. 따라서 200 응답이 실제 원격 DB 영속화를 보장하지는 않습니다.
+- **비밀값 및 세션 미보존**: 개인키, 사용자 암호, 세션 토큰은 백업 파일 및 저장소에 일절 보존하지 않으며 클라이언트 로컬 메모리에서만 휘발성으로 처리됩니다.
+
+---
+
+## 11. 릴리스 버전 명세 및 지원 범위 한계 (Release & Scope Statement)
+
+### 11.1 릴리스 버전 정의
+* **현재 릴리스 버전**: `v0.9.22-rc (Defense Stage 22 Release Candidate)`
+* **버전 성격**: **검증 중인 버전 (원문 검토 기준 수료 후보)**
+* **주의 사항**: 본 22단계 통과는 제출된 커밋 원문(코드, 문서, 설정, 재현 기록)의 일관성을 검토한 결과이며, 상용 운영 인증이나 완전한 v1.0 자동 인증을 의미하지 않습니다.
+
+### 11.2 시연·진술·실측 구분의 원칙
+* **시연 (Demo)**: `node --demo` 또는 `npm run test:r5` 모의 픽스처 기반 화면 출력으로, 실제 백엔드 연동 없이 UI 렌더링 규칙을 확인한 상태입니다.
+* **학생 진술 (Statement)**: 본 실행 설명서에 기록된 재현 기록은 학생 본인이 직접 격리 환경에서 명령을 실행하고 관찰한 사실을 기술한 것이며, 서버 AI가 새 환경에서 대리 실행하여 보증한 결과가 아닙니다.
+* **실제 실행 실측 (Verification)**: 로컬 개발 환경에서 65개 단위 테스트, 정적 빌드, 판정기/탐지기 시뮬레이션을 전수 실행하여 100% 통과를 확인했습니다.
+
+### 11.3 미구현 및 누락 사항 (명확한 지원 범위 한계)
+1. **19단계 제안 보안 조치 실집행 (`proposals`)**:
+   - `student/extension.mjs`의 `renderAction`은 조치 상태 11종 및 효과 적용 여부(`effectApplied`)를 안전하게 분리 표시하지만, 실제 차단·승인 조치를 서버에 집행하는 백엔드 API 연동은 미구현 상태입니다.
+2. **사내망 실서버 mTLS 개인 인증서 연동**:
+   - 교육 과정 특성상 학생에게 개인 mTLS 인증서가 발급되지 않으므로, 앱은 '서버 연결 안 함' 또는 모의 응답으로 안전하게 동작합니다.
+3. **상용 유료 LLM 실시간 API 호출**:
+   - 상용 LLM 직접 연동 대신 수업용 AI 게이트웨이 규격을 준수하며, 근거 ID 미반환 시 안전한 오류 격리를 수행합니다.
+

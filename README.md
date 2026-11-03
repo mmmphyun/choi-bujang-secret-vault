@@ -467,3 +467,53 @@
     ```bash
     npm run test:r5
     ```
+
+## 22단계: 최종 커밋의 새 환경 재현과 릴리스 기록
+
+* **작동하는 기능**:
+  * **새 환경 재현 절차 규정 및 검증 (`docs/STUDENT_RUNBOOK.md:8`)**:
+    * 원본 작업 폴더(`C:\work\aleph-defense`)를 보존하고 격리된 새 폴더(`C:\work\aleph-defense-verify`)에서 동일 커밋 복제(`git clone`) 및 재현 실행 절차 수립
+    * 필수 런타임 검증(Node.js `v24.22.1`, npm `11.19.1`, Git `2.55.0.windows.5`)
+    * 기존 폴더의 `.env.local` 및 인증 파일 무작정 복사 금지 원칙 준수
+    * 클린 설치(`npm install`), 정적 빌드(`npm run build -- --local`), 단위 테스트(`npm run test:r5`), 시뮬레이션 판정기/탐지기 검증, 서버 구동/종료(`Ctrl+C`)/재실행 무결성 확인
+  * **13-21단계 전수 기능 검증 및 상태 매트릭스 (`docs/STUDENT_RUNBOOK.md:9`)**:
+    * 13단계부터 21단계까지 65개 단위 테스트 전수 통과(65/65 PASS) 실측 기록
+    * 모의 데이터 성공(단위 테스트/모의 픽스처)과 실제 시스템 연결 성공(Supabase/AI 게이트웨이/사내망)을 엄격히 구분하여 기술
+  * **학생 데이터 보존·백업 및 복원 계획 (`docs/STUDENT_RUNBOOK.md:10`)**:
+    * 메모 원본(`Supabase`) 및 로컬 사본(`src/backup-notes.json`) 보존 구조화
+    * SHA-256 해시 검증 기반 단건 사본 복원 핸들러(`POST /api/notes/restore`) 검증 절차 명시
+    * 외부 DB 미연결 시 로컬 사본 무결성만 검증하고 DB 영속화는 건너뛰는 200 반환 특성 및 보존 한계 명시
+  * **릴리스 버전 및 지원 범위 한계 명시 (`docs/STUDENT_RUNBOOK.md:11`)**:
+    * 현재 버전: `v0.9.22-rc (Defense Stage 22 Release Candidate, 검증 중인 버전)`
+    * 본 22단계 통과는 서버 AI의 원문 검토 기준 수료이며, 실제 운영 인증이나 v1.0 자동 인증이 아님을 명시
+    * 미구현 범위 진술: **19단계 보안 조치 실집행(`proposals` 서버 연동) 미지원**, 사내망 실서버 mTLS 개인 인증서 미발급 상태 확인
+* **다시 실행하는 방법**:
+  * **격리된 새 폴더 재현 실행**:
+    ```powershell
+    # 1. 새 검증 폴더 생성 및 복제
+    New-Item -ItemType Directory -Path "C:\work\aleph-defense-verify" -Force
+    Set-Location -Path "C:\work\aleph-defense-verify"
+    git clone https://github.com/mmmphyun/choi-bujang-secret-vault.git .
+    git checkout main
+
+    # 2. 런타임 확인 및 의존성 설치
+    node -v
+    npm -v
+    npm install
+
+    # 3. 전체 단위 테스트 검증 (65종)
+    npm run test:r5
+
+    # 4. 판정기 및 이상 탐지 시뮬레이션
+    npm run decider:test
+    npm run detect:test
+    ```
+  * **현재 작업 폴더(`C:\work\aleph-defense`)에서 전체 테스트 검증**:
+    ```powershell
+    npm run test:r5
+    ```
+  * **비공개 저장소 원문 전달 도구 실행 안내**:
+    ```powershell
+    # 제출할 프로젝트 최상위 폴더에서 실행 (40자리 커밋 해시 지정)
+    node "C:\도구\alekov-source-tool\student-source-cli.mjs" --output "C:\제출자료\alekov-source.json" --commit <40자리커밋해시>
+    ```
